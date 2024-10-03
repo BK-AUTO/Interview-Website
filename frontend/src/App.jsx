@@ -3,11 +3,13 @@ import Navbar from './components/Navbar';
 import Management from './components/Management';
 import { io } from 'socket.io-client';
 
+export const BASE_URL = import.meta.env.MODE === "development" ? "http://127.0.0.1:5000/api" : "/api";
+
 function App() {
   const [members, setMembers] = useState([]);
 
   useEffect(() => {
-    const socket = io('http://localhost:5000', {
+    const socket = io(BASE_URL, {
       transports: ['websocket'],
     });
 

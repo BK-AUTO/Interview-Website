@@ -16,7 +16,7 @@ import {
   useToast
 } from '@chakra-ui/react';
 import { AiOutlineCheckCircle } from "react-icons/ai";
-
+import { BASE_URL } from '../App';
 const Checkin = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [uid, setUid] = useState('');
@@ -24,7 +24,7 @@ const Checkin = () => {
 
   const handleCheckin = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/checkin', {
+      const response = await fetch(BASE_URL + '/checkin/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

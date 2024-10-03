@@ -20,6 +20,7 @@ import {
 } from '@chakra-ui/react';
 import { IoMdQrScanner } from "react-icons/io";
 import QrScanner from 'qr-scanner';
+import { BASE_URL} from '../App';
 
 const Checkin = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
@@ -69,7 +70,7 @@ const Checkin = () => {
 
   const handleCheckin = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/checkin', {
+      const response = await fetch(BASE_URL + '/checkin/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
