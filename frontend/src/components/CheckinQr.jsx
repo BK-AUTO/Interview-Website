@@ -20,7 +20,7 @@ import {
 } from '@chakra-ui/react';
 import { IoMdQrScanner } from "react-icons/io";
 import QrScanner from 'qr-scanner';
-import { BASE_URL} from '../App';
+import { BASE_URL} from '../config';
 
 const Checkin = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();

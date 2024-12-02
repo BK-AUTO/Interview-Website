@@ -1,56 +1,103 @@
 import { useState, useEffect } from 'react';
+import {
+  Box,
+  Flex,
+  Tabs,
+  TabPanels,
+  TabPanel,
+  useColorModeValue,
+  Drawer,
+  DrawerContent,
+  useBreakpointValue
+} from '@chakra-ui/react';
 import Navbar from './components/Navbar';
 import Management from './components/Management';
-import { io } from 'socket.io-client';
-
-export const BASE_URL = import.meta.env.MODE === "development" ? "http://127.0.0.1:5000/api" : "/api";
+import WebsiteManagement from './components/WebsiteManagement';
+import Sidebar from './components/Sidebar';
+import Login from './components/Login'; // Import the Login component
+import Register from './components/Register'; // Import the Register component
+import api from './api/axios'; // Import the Axios instance
+import { BASE_URL } from './config'; // Import BASE_URL from config
 
 function App() {
   const [members, setMembers] = useState([]);
+  const [activeTab, setActiveTab] = useState(0);
+  const [isSidebarMinimized, setIsSidebarMinimized] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  const isDesktop = useBreakpointValue({ base: false, lg: true });
 
   useEffect(() => {
-    const socket = io(BASE_URL, {
-      transports: ['websocket'],
-    });
+    if (isAuthenticated) {
+      const fetchMembers = async () => {
+        try {
+          const token = localStorage.getItem('token');
+          const response = await api.get('/members', {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
+          setMembers(response.data);
+        } catch (error) {
+          console.error('Error fetching members:', error);
+        }
+      };
 
-    socket.on('connect', () => {
-      console.log('WebSocket connection opened');
-    });
+      fetchMembers();
+    }
+  }, [isAuthenticated]);
 
-    socket.on('disconnect', () => {
-      console.log('WebSocket connection closed');
-    });
-
-    socket.on('member_checked_in', (member) => {
-      console.log('Member checked in:', member);
-      setMembers((prevMembers) => {
-        const updatedMembers = prevMembers.map((m) =>
-          m.uid === member.uid ? member : m
-        );
-        return updatedMembers;
-      });
-    });
-
-    socket.on('members_list', (membersList) => {
-      setMembers(membersList);
-    });
-
-    socket.on('error', (error) => {
-      console.error('WebSocket error:', error);
-    });
-
-    return () => {
-      if (socket.connected) {
-        socket.disconnect();
-      }
-    };
-  }, []);
+  if (!isAuthenticated) {
+    return isRegistering ? (
+      <Register setIsAuthenticated={setIsAuthenticated} />
+    ) : (
+      <Login setIsAuthenticated={setIsAuthenticated} setIsRegistering={setIsRegistering} />
+    );
+  }
 
   return (
-    <>
+    <Box h="100vh" overflow="hidden">
       <Navbar />
-      <Management members={members} />
-    </>
+      <Flex h="calc(100vh - 60px)">
+        {isDesktop ? (
+          <Sidebar
+            isSidebarMinimized={isSidebarMinimized}
+            setIsSidebarMinimized={setIsSidebarMinimized}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+          />
+        ) : (
+          <Drawer
+            isOpen={!isSidebarMinimized}
+            placement="left"
+            onClose={() => setIsSidebarMinimized(true)}
+          >
+            <DrawerContent>
+              <Sidebar
+                isSidebarMinimized={isSidebarMinimized}
+                setIsSidebarMinimized={setIsSidebarMinimized}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+              />
+            </DrawerContent>
+          </Drawer>
+        )}
+        
+        <Box flex="1" p={4} bg={useColorModeValue("gray.50", "gray.800")} overflowY="auto">
+          <Tabs index={activeTab} onChange={setActiveTab} variant="unstyled">
+            <TabPanels>
+              <TabPanel>
+                <Management members={members} setMembers={setMembers} />
+              </TabPanel>
+              <TabPanel>
+                <WebsiteManagement setActiveTab={setActiveTab} />
+              </TabPanel>
+            </TabPanels>
+          </Tabs>
+        </Box>
+      </Flex>
+    </Box>
   );
 }
 

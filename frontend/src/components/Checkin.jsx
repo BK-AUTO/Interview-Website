@@ -16,7 +16,7 @@ import {
   useToast
 } from '@chakra-ui/react';
 import { AiOutlineCheckCircle } from "react-icons/ai";
-import { BASE_URL } from '../App';
+import { BASE_URL } from '../config';
 const Checkin = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [uid, setUid] = useState('');
