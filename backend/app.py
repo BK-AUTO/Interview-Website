@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_socketio import SocketIO, emit
 from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS  # Import CORSm                                         
+from flask_cors import CORS
 from datetime import datetime
 import logging
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -14,11 +14,14 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config['JWT_SECRET_KEY'] = 'jwt-secret-string'  # Change this to a random secret key
 
 db = SQLAlchemy(app)
-socketio = SocketIO(app, cors_allowed_origins="*")
+# Use threading async_mode which is compatible with Python 3.12
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading', logger=True, engineio_logger=True)
 CORS(app)  # Enable CORS for the app
 jwt = JWTManager(app)
 
-logging.basicConfig(level=logging.INFO)
+# Configure detailed logging
+logging.basicConfig(level=logging.DEBUG, 
+                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 class Member(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -66,7 +69,7 @@ def login():
     return jsonify({'access_token': access_token}), 200
 
 @app.route('/members', methods=['GET'])
-@jwt_required()
+# @jwt_required()
 def get_members():
     try:
         members = Member.query.all()
@@ -171,7 +174,7 @@ def delete_member(id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/checkin', methods=['POST'])
-@jwt_required()
+# @jwt_required()
 def checkin_member():
     try:
         data = request.get_json()
@@ -241,21 +244,25 @@ def checkin_member_esp():
 @socketio.on('connect')
 def handle_connect():
     try:
+        logging.info("Client connected to SocketIO")
         with app.app_context():
             members = Member.query.all()
-            emit('members_list', [{
+            member_list = [{
                 'id': member.id,
                 'MSSV': member.MSSV,
                 'name': member.name,
                 'specialist': member.specialist,
                 'role': member.role,
                 'IDcard': member.IDcard
-            } for member in members])
+            } for member in members]
+            logging.info(f"Sending members list: {len(member_list)} members")
+            emit('members_list', member_list)
     except Exception as e:
         logging.error(f"Error during socket connection: {e}")
-        emit('error', {'message': 'Internal server error'})
+        emit('error', {'message': f'Internal server error: {str(e)}'})
 
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=True)
+    # Use threading mode for compatibility
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=True, allow_unsafe_werkzeug=True)

@@ -21,7 +21,7 @@ const Login = ({ setIsAuthenticated, setIsRegistering }) => {
     <Grid templateColumns="2fr 1fr" height="100vh">
       <GridItem>
         <Image 
-          src="https://i.imgur.com/HZ4Hagx.jpeg" 
+          src="https://i.imgur.com/HZ4Hagx.jpg" 
           alt="Login Image" 
           objectFit="cover" 
           height="100%" 
@@ -41,18 +41,36 @@ const Login = ({ setIsAuthenticated, setIsRegistering }) => {
         mb={8}
         borderRadius="md"
       >
-        <Text
+        {/* <Text
           as={'span'}
           bgGradient={'linear(to-r, pink.400, purple.500)'}
           bgClip={'text'}
         >
           BK-AUTO
-        </Text>
+        </Text> */}
+        <Image 
+          src="https://i.imgur.com/4yX5pPH.png" 
+          alt="Logo Image" 
+          objectFit="cover" 
+          height="80%" 
+          width="80%" 
+          borderRadius="lg" 
+          align ="center"
+        marginLeft="auto"
+        marginRight="auto"
+        />
       </Text>
             <Heading
-            textAlign={'center'}>Login</Heading>
+            textAlign={'center'}
+            fontSize={{ base: '3xl', md: '50' }}
+            fontWeight={'light'}
+            letterSpacing={'2px'}
+            mb={8}
+      
+            >Login</Heading>
             <FormControl id="username">
-              <FormLabel>Username</FormLabel>
+              <FormLabel
+              fontWeight = {'light'}>Username</FormLabel>
               <Input
                 type="text"
                 value={username}
@@ -60,7 +78,10 @@ const Login = ({ setIsAuthenticated, setIsRegistering }) => {
               />
             </FormControl>
             <FormControl id="password">
-              <FormLabel>Password</FormLabel>
+              <FormLabel
+              fontWeight = {'light'}>
+                Password
+              </FormLabel>
               <Input
                 type="password"
                 value={password}
@@ -68,10 +89,13 @@ const Login = ({ setIsAuthenticated, setIsRegistering }) => {
               />
             </FormControl>
             {error && <Text color="red.500">{error}</Text>}
-            <Button colorScheme="teal" onClick={handleLogin}>
+            <Button
+            bgGradient={'linear(to-r, rgb(239, 215, 83), rgb(224, 55, 34))'}
+            color={'white'}
+            fontWeight = {'light'}  onClick={handleLogin}>
               Login
             </Button>
-            <Button variant="link" onClick={() => setIsRegistering(true)}>Register</Button>
+            <Button fontWeight = {'light'} variant="link" onClick={() => setIsRegistering(true)}>Register</Button>
           </VStack>
         </Box>
       </GridItem>
