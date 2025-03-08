@@ -9,6 +9,10 @@ logger = logging.getLogger(__name__)
 if __name__ == "__main__":
     logger.info("Starting application with threading mode")
     try:
+        # Make sure CORS is properly handled
+        from flask_cors import CORS
+        CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+        
         socketio.run(
             app,
             host='0.0.0.0',

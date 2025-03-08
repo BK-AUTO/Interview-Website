@@ -90,7 +90,7 @@ const Management = ({ members, setMembers }) => {
 
   const handleAddMember = async (member) => {
     try {
-      const response = await api.post('members', member);
+      const response = await api.post('/api/members', member);
       setMembers((prevMembers) => [...prevMembers, response.data.member]);
     } catch (error) {
       console.error('Error adding member:', error);
@@ -99,7 +99,7 @@ const Management = ({ members, setMembers }) => {
 
   const handleEditMember = async (id, updatedMember) => {
     try {
-      const response = await api.put(`members/${id}`, updatedMember);
+      const response = await api.put(`/api/members/${id}`, updatedMember);
       setMembers((prevMembers) =>
         prevMembers.map((member) => (member.id === id ? response.data.member : member))
       );
@@ -110,7 +110,7 @@ const Management = ({ members, setMembers }) => {
 
   const handleDeleteMember = async (id) => {
     try {
-      await api.delete(`members/${id}`);
+      await api.delete(`/api/members/${id}`);
       setMembers((prevMembers) => prevMembers.filter((member) => member.id !== id));
     } catch (error) {
       console.error('Error deleting member:', error);
@@ -169,7 +169,7 @@ const Management = ({ members, setMembers }) => {
 
   const handleDeleteConfirm = async () => {
     try {
-      await api.delete(`${BASE_URL}/members/${selectedMember.id}`);
+      await api.delete(`/api/members/${selectedMember.id}`);
       setMembers(members.filter((m) => m.id !== selectedMember.id));
       onDeleteClose();
     } catch (error) {

@@ -13,49 +13,68 @@ import {
   FormLabel,
   Flex,
   Input,
-  useToast
+  useToast,
+  Spinner
 } from '@chakra-ui/react';
 import { AiOutlineCheckCircle } from "react-icons/ai";
-import { BASE_URL } from '../config';
+import api from '../api/axios';
+
 const Checkin = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [uid, setUid] = useState('');
+  const [loading, setLoading] = useState(false);
   const toast = useToast();
 
   const handleCheckin = async () => {
-    try {
-      const response = await fetch(BASE_URL + '/checkin/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ uid })
+    if (!uid.trim()) {
+      toast({
+        title: "UID is required",
+        description: "Please enter your UID before checking in",
+        status: "warning",
+        duration: 3000,
+        isClosable: true,
       });
-      const data = await response.json();
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await api.post('/api/checkin', { uid });
       
-      if (response.ok) {
-        const {name,checkin_time,speciality} = data.member;
-        const date = new Date(checkin_time);
-        const formattedTime = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')} ${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+      if (response.data && response.data.member) {
+        const { name, specialist, checkin_time } = response.data.member;
+        
+        // Format the date for display
+        let formattedTime = checkin_time;
+        try {
+          const date = new Date(checkin_time);
+          formattedTime = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')} ${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+        } catch (e) {
+          console.error('Error formatting date:', e);
+        }
+        
         toast({
           title: `${name} check-in thành công`,
-          description: `Thành viên ${name} mảng ${speciality} đã check-in vào lúc ${formattedTime}`,
+          description: `Thành viên ${name} mảng ${specialist} đã check-in vào lúc ${formattedTime}`,
           status: "success",
           duration: 5000,
           isClosable: true,
         });
+        setUid('');
         onClose();
-      } else {
-        throw new Error(data.message);
       }
     } catch (error) {
+      console.error('Check-in error:', error);
+      const errorMessage = error.response?.data?.message || 'Unable to check-in. Please try again.';
       toast({
         title: "Check-in failed",
-        description: error.message,
+        description: errorMessage,
         status: "error",
         duration: 3000,
         isClosable: true,
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -83,10 +102,16 @@ const Checkin = () => {
             </Flex>
           </ModalBody>
           <ModalFooter>
-            <Button colorScheme="blue" mr={3} onClick={handleCheckin}>
+            <Button 
+              colorScheme="blue" 
+              mr={3} 
+              onClick={handleCheckin} 
+              isLoading={loading}
+              loadingText="Checking in..."
+            >
               Check-in
             </Button>
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button variant="ghost" onClick={onClose} isDisabled={loading}>Cancel</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

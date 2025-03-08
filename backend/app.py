@@ -16,7 +16,9 @@ app.config['JWT_SECRET_KEY'] = 'jwt-secret-string'  # Change this to a random se
 db = SQLAlchemy(app)
 # Use threading async_mode which is compatible with Python 3.12
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading', logger=True, engineio_logger=True)
-CORS(app)  # Enable CORS for the app
+
+# Enable CORS with more specific settings
+CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 jwt = JWTManager(app)
 
 # Configure detailed logging
@@ -38,7 +40,7 @@ class User(db.Model):
     MSSV = db.Column(db.String(10), db.ForeignKey('member.MSSV'), nullable=False)
     member = db.relationship('Member', backref=db.backref('user', lazy=True))
 
-@app.route('/register', methods=['POST'])
+@app.route('/api/register', methods=['POST'])
 def register():
     data = request.get_json()
     username = data.get('username')
@@ -55,7 +57,7 @@ def register():
 
     return jsonify({'message': 'User registered successfully'}), 201
 
-@app.route('/login', methods=['POST'])
+@app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
     username = data.get('username')
@@ -68,7 +70,7 @@ def login():
     access_token = create_access_token(identity={'username': user.username, 'MSSV': user.MSSV})
     return jsonify({'access_token': access_token}), 200
 
-@app.route('/members', methods=['GET'])
+@app.route('/api/members', methods=['GET'])
 # @jwt_required()
 def get_members():
     try:
@@ -85,7 +87,7 @@ def get_members():
         logging.error(f"Error getting members: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/members', methods=['POST'])
+@app.route('/api/members', methods=['POST'])
 @jwt_required()
 def add_member():
     try:
@@ -120,7 +122,7 @@ def add_member():
         logging.error(f"Error adding member: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/members/<int:id>', methods=['PUT'])
+@app.route('/api/members/<int:id>', methods=['PUT'])
 @jwt_required()
 def edit_member(id):
     try:
@@ -156,7 +158,7 @@ def edit_member(id):
         logging.error(f"Error editing member: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/members/<int:id>', methods=['DELETE'])
+@app.route('/api/members/<int:id>', methods=['DELETE'])
 @jwt_required()
 def delete_member(id):
     try:
@@ -173,25 +175,43 @@ def delete_member(id):
         logging.error(f"Error deleting member: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/checkin', methods=['POST'])
-# @jwt_required()
+@app.route('/api/checkin', methods=['POST'])
+# Remove the @jwt_required() decorator
 def checkin_member():
     try:
         data = request.get_json()
-        MSSV = data.get('MSSV')
-        member = Member.query.filter_by(MSSV=MSSV).first()
+        uid = data.get('uid')  # Change from MSSV to uid
+        
+        # Try to find member by both MSSV and IDcard
+        member = Member.query.filter_by(MSSV=uid).first()
+        if not member:
+            member = Member.query.filter_by(IDcard=uid).first()
+            
         if member:
-            member.checkin_time = datetime.now().strftime('%H:%M:%S %d/%m/%Y')
+            # Check if Member model has checkin_time and state columns, add them if not
+            if not hasattr(member, 'checkin_time'):
+                with app.app_context():
+                    db.engine.execute('ALTER TABLE member ADD COLUMN checkin_time TEXT')
+                    
+            if not hasattr(member, 'state'):
+                with app.app_context():
+                    db.engine.execute('ALTER TABLE member ADD COLUMN state TEXT')
+                    
+            member.checkin_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             member.state = 'Đã checkin'
             db.session.commit()
+            
             socketio.emit('member_checked_in', {
                 'id': member.id,
                 'MSSV': member.MSSV,
                 'name': member.name,
                 'specialist': member.specialist,
                 'role': member.role,
-                'IDcard': member.IDcard
+                'IDcard': member.IDcard,
+                'checkin_time': member.checkin_time,
+                'state': member.state
             })
+            
             logging.info(f"Member checked in: {member.name}")
             return jsonify({'message': 'Check-in successful', 'member': {
                 'id': member.id,
@@ -199,15 +219,18 @@ def checkin_member():
                 'name': member.name,
                 'specialist': member.specialist,
                 'role': member.role,
-                'IDcard': member.IDcard
+                'IDcard': member.IDcard,
+                'checkin_time': member.checkin_time,
+                'state': member.state
             }})
         else:
+            logging.warning(f"Member not found with uid: {uid}")
             return jsonify({'message': 'Member not found'}), 404
     except Exception as e:
         logging.error(f"Error checking in member: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/esp/checkin', methods=['POST'])
+@app.route('/api/esp/checkin', methods=['POST'])
 @jwt_required()
 def checkin_member_esp():
     try:

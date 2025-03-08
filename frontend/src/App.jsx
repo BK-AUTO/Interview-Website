@@ -33,7 +33,7 @@ function App() {
       const fetchMembers = async () => {
         try {
           const token = localStorage.getItem('token');
-          const response = await api.get('/members', {
+          const response = await api.get('/api/members', {
             headers: {
               Authorization: `Bearer ${token}`
             }

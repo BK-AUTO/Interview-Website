@@ -6,6 +6,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: false  // Change to false for now to resolve CORS issues
 });
 
 api.interceptors.request.use((config) => {
@@ -16,11 +17,17 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Add response interceptor to handle errors
+// Add more detailed response error handling
 api.interceptors.response.use(
   response => response,
   error => {
-    console.error('API Error:', error);
+    console.error('API Error:', error.response?.data || error.message || error);
+    
+    // Add specific handling for CORS errors
+    if (error.message === 'Network Error') {
+      console.error('This appears to be a CORS or network connectivity issue');
+    }
+    
     return Promise.reject(error);
   }
 );

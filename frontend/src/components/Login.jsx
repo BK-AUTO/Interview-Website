@@ -9,10 +9,11 @@ const Login = ({ setIsAuthenticated, setIsRegistering }) => {
 
   const handleLogin = async () => {
     try {
-      const response = await api.post('/login', { username, password });
+      const response = await api.post('/api/login', { username, password });
       localStorage.setItem('token', response.data.access_token);
       setIsAuthenticated(true);
     } catch (error) {
+      console.error('Login error:', error);
       setError('Invalid credentials');
     }
   };
