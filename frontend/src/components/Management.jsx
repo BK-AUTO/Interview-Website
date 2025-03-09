@@ -27,7 +27,8 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogContent,
-  AlertDialogOverlay
+  AlertDialogOverlay,
+  useToast
 } from '@chakra-ui/react';
 import { TriangleDownIcon, TriangleUpIcon, EditIcon, DeleteIcon } from '@chakra-ui/icons'; // Import icons
 import api from '../api/axios';
@@ -41,6 +42,7 @@ const Management = ({ members, setMembers }) => {
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
   const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
   const cancelRef = React.useRef();
+  const toast = useToast();
 
   useEffect(() => {
     const specialists = [...new Set(members.map(member => member.specialist))];
@@ -123,7 +125,9 @@ const Management = ({ members, setMembers }) => {
       MSSV: '',
       specialist: '',
       role: '',
-      IDcard: ''
+      IDcard: '',
+      state: '',
+      checkin_time: ''
     });
     onEditOpen();
   };
@@ -141,7 +145,9 @@ const Management = ({ members, setMembers }) => {
       MSSV: selectedMember.MSSV || '',
       specialist: selectedMember.specialist || '',
       role: selectedMember.role || '',
-      IDcard: selectedMember.IDcard || ''
+      IDcard: selectedMember.IDcard || '',
+      state: selectedMember.state || '',
+      checkin_time: selectedMember.checkin_time || ''
     };
 
     if (selectedMember.id) {
@@ -174,6 +180,79 @@ const Management = ({ members, setMembers }) => {
       onDeleteClose();
     } catch (error) {
       console.error('Error deleting member:', error);
+    }
+  };
+
+  // Replace the handleCallForInterview function with a new one that handles the multi-state flow
+  const handleInterviewStateChange = async (member) => {
+    try {
+      let newState = '';
+      let actionDescription = '';
+      let toastTitle = '';
+      let toastDescription = '';
+      let toastStatus = 'info';
+  
+      // Determine the next state based on current state
+      if (member.state === 'Đã checkin') {
+        newState = 'Gọi PV';
+        actionDescription = 'gọi phỏng vấn';
+        toastTitle = `${member.name} được gọi phỏng vấn`;
+        toastDescription = 'Thành viên đã được gọi phỏng vấn';
+        toastStatus = 'info';
+      } else if (member.state === 'Gọi PV') {
+        newState = 'Đang phỏng vấn';
+        actionDescription = 'bắt đầu phỏng vấn';
+        toastTitle = `Bắt đầu phỏng vấn ${member.name}`;
+        toastDescription = 'Thành viên đang được phỏng vấn';
+        toastStatus = 'warning';
+      } else if (member.state === 'Đang phỏng vấn') {
+        newState = 'Đã phỏng vấn';
+        actionDescription = 'kết thúc phỏng vấn';
+        toastTitle = `Kết thúc phỏng vấn ${member.name}`;
+        toastDescription = 'Thành viên đã hoàn thành phỏng vấn';
+        toastStatus = 'success';
+      } else {
+        toast({
+          title: "Cannot update interview state",
+          description: "Invalid current state",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
+      }
+  
+      // Create a copy of the member with updated state
+      const updatedMember = {
+        ...member,
+        state: newState
+      };
+      
+      // Use the API to update the member state
+      const response = await api.put(`/api/members/${member.id}`, updatedMember);
+      
+      // Update local state for immediate feedback
+      setMembers((prevMembers) =>
+        prevMembers.map((m) => (m.id === member.id ? response.data.member : m))
+      );
+      
+      // Show feedback toast
+      toast({
+        title: toastTitle,
+        description: toastDescription,
+        status: toastStatus,
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (error) {
+      console.error('Error updating interview status:', error);
+      toast({
+        title: "Error",
+        description: "Could not update member's interview status",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
     }
   };
 
@@ -242,8 +321,14 @@ const Management = ({ members, setMembers }) => {
               <Th onClick={() => requestSort('specialist')} borderRadius="md">
                 Speciality {getSortIcon('specialist')}
               </Th>
-              <Th onClick={() => requestSort('role')} borderRadius="md">
+              {/* <Th onClick={() => requestSort('role')} borderRadius="md">
                 Role {getSortIcon('role')}
+              </Th> */}
+              <Th onClick={() => requestSort('state')} borderRadius="md">
+                Status {getSortIcon('state')}
+              </Th>
+              <Th onClick={() => requestSort('checkin_time')} borderRadius="md">
+                Check-in Time {getSortIcon('checkin_time')}
               </Th>
               <Th borderRadius="md">Action</Th>
             </Tr>
@@ -254,19 +339,48 @@ const Management = ({ members, setMembers }) => {
                 <Td borderRadius="md">{member.MSSV}</Td>
                 <Td minWidth="200px" borderRadius="md">{member.name}</Td>
                 <Td borderRadius="md">{member.specialist}</Td>
-                <Td borderRadius="md">{member.role}</Td>
+                {/* <Td borderRadius="md">{member.role}</Td> */}
+                <Td borderRadius="md">
+                  {member.state && (
+                    <Text
+                      color={member.state === 'Đã checkin' ? 'green.500' : 'red.500'}
+                      fontWeight="bold"
+                    >
+                      {member.state}
+                    </Text>
+                  )}
+                </Td>
+                <Td borderRadius="md">{member.checkin_time || 'N/A'}</Td>
                 <Td borderRadius="md">
                   <IconButton
                     icon={<EditIcon />}
                     onClick={() => openEditModal(member)}
                     mr={2}
                     borderRadius="md"
+                    isDisabled={member.state === 'Đã phỏng vấn'} // Disable for completed interviews
                   />
                   <IconButton
                     icon={<DeleteIcon />}
                     onClick={() => handleDeleteClick(member)}
+                    mr={2}
                     borderRadius="md"
+                    isDisabled={member.state === 'Đã phỏng vấn'} // Disable for completed interviews
                   />
+                  {/* Dynamic interview action button */}
+                  {member.state === 'Đã checkin' || member.state === 'Gọi PV' || member.state === 'Đang phỏng vấn' ? (
+                    <Button
+                      size="sm"
+                      colorScheme={
+                        member.state === 'Đã checkin' ? 'blue' : 
+                        member.state === 'Gọi PV' ? 'orange' : 'red'
+                      }
+                      onClick={() => handleInterviewStateChange(member)}
+                      borderRadius="md"
+                    >
+                      {member.state === 'Đã checkin' ? 'Gọi PV' : 
+                       member.state === 'Gọi PV' ? 'Bắt đầu PV' : 'Kết thúc PV'}
+                    </Button>
+                  ) : null}
                 </Td>
               </Tr>
             ))}

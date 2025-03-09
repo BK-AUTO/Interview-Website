@@ -14,7 +14,7 @@ import {
   ChevronRightIcon,
   SettingsIcon
 } from '@chakra-ui/icons';
-import { FaUsers } from 'react-icons/fa'; // Importing PeopleIcon from react-icons
+import { FaUsers, FaChartBar } from 'react-icons/fa'; // Add FaChartBar for the interview tracker
 
 const Sidebar = ({ isSidebarMinimized, setIsSidebarMinimized, activeTab, setActiveTab }) => {
   const sidebarBg = useColorModeValue("gray.50", "gray.900");
@@ -63,7 +63,7 @@ const Sidebar = ({ isSidebarMinimized, setIsSidebarMinimized, activeTab, setActi
           borderRadius="md"
         >
           <Button
-            leftIcon={<FaUsers />} // Using FaUsers as PeopleIcon
+            leftIcon={<FaUsers />}
             justifyContent={isSidebarMinimized ? "center" : "flex-start"}
             w="full"
             py={6}
@@ -78,6 +78,29 @@ const Sidebar = ({ isSidebarMinimized, setIsSidebarMinimized, activeTab, setActi
           </Button>
         </Tooltip>
 
+        {/* Add new navigation item for Interview Tracker */}
+        <Tooltip
+          label="Bảng Theo Dõi Phỏng Vấn"
+          placement="right"
+          isDisabled={!isSidebarMinimized}
+          borderRadius="md"
+        >
+          <Button
+            leftIcon={<FaChartBar />}
+            justifyContent={isSidebarMinimized ? "center" : "flex-start"}
+            w="full"
+            py={6}
+            bg={activeTab === 1 ? activeButtonBg : "transparent"}
+            color={activeTab === 1 ? activeButtonColor : "inherit"}
+            _hover={{ bg: buttonHoverBg }}
+            onClick={() => setActiveTab(1)}
+            variant="ghost"
+            borderRadius="md"
+          >
+            {!isSidebarMinimized && "Bảng Theo Dõi Phỏng Vấn"}
+          </Button>
+        </Tooltip>
+
         <Tooltip
           label="Website Management"
           placement="right"
@@ -89,10 +112,10 @@ const Sidebar = ({ isSidebarMinimized, setIsSidebarMinimized, activeTab, setActi
             justifyContent={isSidebarMinimized ? "center" : "flex-start"}
             w="full"
             py={6}
-            bg={activeTab === 1 ? activeButtonBg : "transparent"}
-            color={activeTab === 1 ? activeButtonColor : "inherit"}
+            bg={activeTab === 2 ? activeButtonBg : "transparent"}
+            color={activeTab === 2 ? activeButtonColor : "inherit"}
             _hover={{ bg: buttonHoverBg }}
-            onClick={() => setActiveTab(1)}
+            onClick={() => setActiveTab(2)}
             variant="ghost"
             borderRadius="md"
           >

@@ -16,8 +16,8 @@ if __name__ == "__main__":
         
         # Create database tables if they don't exist
         with app.app_context():
-            # Uncomment the next line if you need to recreate the database with the new columns
-            db.drop_all()  # Be careful with this in production!
+            # Recreate the database to ensure the new columns are present
+            # db.drop_all()  # This will drop all existing tables
             db.create_all()
             logger.info("Database tables created/updated successfully")
         

@@ -32,10 +32,12 @@ class Member(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100))
     MSSV = db.Column(db.String(10))
+    email = db.Column(db.String(100))  # Add email field
     specialist = db.Column(db.String(100))
     role = db.Column(db.String(100))
     IDcard = db.Column(db.String(100))
-    # Add these columns to the model
+    UID = db.Column(db.String(100))    # Add UID field
+    # Existing fields
     checkin_time = db.Column(db.String(100), nullable=True)
     state = db.Column(db.String(100), nullable=True)
 
@@ -85,16 +87,20 @@ def get_members():
             'id': member.id,
             'MSSV': member.MSSV,
             'name': member.name,
+            'email': member.email,  # Include email
             'specialist': member.specialist,
             'role': member.role,
-            'IDcard': member.IDcard
+            'IDcard': member.IDcard,
+            'UID': member.UID,      # Include UID
+            'checkin_time': member.checkin_time,  # Ensure these fields are included
+            'state': member.state                # Ensure these fields are included
         } for member in members])
     except Exception as e:
         logging.error(f"Error getting members: {e}")
         return jsonify({'error': str(e)}), 500
 
+# @jwt_required()
 @app.route('/api/members', methods=['POST'])
-@jwt_required()
 def add_member():
     try:
         data = request.get_json()
@@ -128,44 +134,67 @@ def add_member():
         logging.error(f"Error adding member: {e}")
         return jsonify({'error': str(e)}), 500
 
+# @jwt_required()
 @app.route('/api/members/<int:id>', methods=['PUT'])
-@jwt_required()
 def edit_member(id):
     try:
         data = request.get_json()
         member = Member.query.get(id)
         if member:
-            member.name = data['name']
-            member.MSSV = data['MSSV']
-            member.specialist = data['specialist']
-            member.role = data['role']
-            member.IDcard = data['IDcard']
+            previous_state = member.state  # Store previous state to check for transitions
+            
+            # Update member data
+            member.name = data.get('name', member.name)
+            member.MSSV = data.get('MSSV', member.MSSV)
+            member.specialist = data.get('specialist', member.specialist)
+            member.role = data.get('role', member.role)
+            member.IDcard = data.get('IDcard', member.IDcard)
+            member.email = data.get('email', member.email)
+            member.UID = data.get('UID', member.UID)
+            
+            # Check for state change
+            if 'state' in data:
+                member.state = data['state']
+                
             db.session.commit()
-            socketio.emit('member_edited', {
+            
+            # Create response data
+            member_data = {
                 'id': member.id,
                 'MSSV': member.MSSV,
                 'name': member.name,
                 'specialist': member.specialist,
                 'role': member.role,
-                'IDcard': member.IDcard
-            })
-            logging.info(f"Member edited: {member.name}")
-            return jsonify({'message': 'Member edited successfully', 'member': {
-                'id': member.id,
-                'MSSV': member.MSSV,
-                'name': member.name,
-                'specialist': member.specialist,
-                'role': member.role,
-                'IDcard': member.IDcard
-            }})
+                'IDcard': member.IDcard,
+                'UID': member.UID,
+                'email': member.email,
+                'state': member.state,
+                'checkin_time': member.checkin_time
+            }
+            
+            # Emit different events based on state changes and transitions
+            if member.state == 'Gọi PV' and previous_state != 'Gọi PV':
+                logging.info(f"Emitting interview call event for: {member.name}")
+                socketio.emit('member_interview_called', member_data)
+            elif member.state == 'Đang phỏng vấn' and previous_state != 'Đang phỏng vấn':
+                logging.info(f"Emitting interview started event for: {member.name}")
+                socketio.emit('member_interview_started', member_data)
+            elif member.state == 'Đã phỏng vấn' and previous_state != 'Đã phỏng vấn':
+                logging.info(f"Emitting interview completed event for: {member.name}")
+                socketio.emit('member_interview_ended', member_data)
+            else:
+                socketio.emit('member_edited', member_data)
+                
+            logging.info(f"Member edited: {member.name}, state changed from {previous_state} to {member.state}")
+            return jsonify({'message': 'Member edited successfully', 'member': member_data})
         else:
             return jsonify({'message': 'Member not found'}), 404
     except Exception as e:
         logging.error(f"Error editing member: {e}")
         return jsonify({'error': str(e)}), 500
 
+# @jwt_required()
 @app.route('/api/members/<int:id>', methods=['DELETE'])
-@jwt_required()
 def delete_member(id):
     try:
         member = Member.query.get(id)
@@ -188,10 +217,24 @@ def checkin_member():
         data = request.get_json()
         uid = data.get('uid')
         
-        # Find member by MSSV or IDcard
-        member = Member.query.filter_by(MSSV=uid).first() or Member.query.filter_by(IDcard=uid).first()
+        # Try to find member by UID, MSSV or IDcard
+        member = Member.query.filter_by(UID=uid).first() or \
+                 Member.query.filter_by(MSSV=uid).first() or \
+                 Member.query.filter_by(IDcard=uid).first()
             
         if member:
+            # Check if member is currently in an interview or has completed interview
+            if member.state == 'Đang phỏng vấn':
+                logging.warning(f"Member {member.name} is currently in an interview and cannot check in")
+                return jsonify({
+                    'message': 'Cannot check in. Member is currently in an interview'
+                }), 400
+            elif member.state == 'Đã phỏng vấn':
+                logging.warning(f"Member {member.name} has already completed their interview")
+                return jsonify({
+                    'message': 'Member has already completed their interview'
+                }), 400
+                
             current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             member.checkin_time = current_time
             member.state = 'Đã checkin'
@@ -201,20 +244,25 @@ def checkin_member():
                 'id': member.id,
                 'MSSV': member.MSSV,
                 'name': member.name,
+                'email': member.email,
                 'specialist': member.specialist,
                 'role': member.role,
                 'IDcard': member.IDcard,
+                'UID': member.UID,
                 'checkin_time': member.checkin_time,
                 'state': member.state
             })
+            
             logging.info(f"Member checked in: {member.name}")
             return jsonify({'message': 'Check-in successful', 'member': {
                 'id': member.id,
                 'MSSV': member.MSSV,
                 'name': member.name,
+                'email': member.email,
                 'specialist': member.specialist,
                 'role': member.role,
                 'IDcard': member.IDcard,
+                'UID': member.UID,
                 'checkin_time': member.checkin_time,
                 'state': member.state
             }})
@@ -225,8 +273,8 @@ def checkin_member():
         logging.error(f"Error checking in member: {e}")
         return jsonify({'error': str(e)}), 500
 
+# @jwt_required()
 @app.route('/api/esp/checkin', methods=['POST'])
-@jwt_required()
 def checkin_member_esp():
     try:
         data = request.get_json()
@@ -271,12 +319,38 @@ def handle_connect():
                 'name': member.name,
                 'specialist': member.specialist,
                 'role': member.role,
-                'IDcard': member.IDcard
+                'IDcard': member.IDcard,
+                'UID': member.UID,
+                'checkin_time': member.checkin_time,  # Add to socket response
+                'state': member.state                # Add to socket response
             } for member in members]
             logging.info(f"Sending members list: {len(member_list)} members")
             emit('members_list', member_list)
     except Exception as e:
         logging.error(f"Error during socket connection: {e}")
+        emit('error', {'message': f'Internal server error: {str(e)}'})
+
+# Add a socket event handler for client requests
+@socketio.on('request_update')
+def handle_update_request():
+    try:
+        with app.app_context():
+            members = Member.query.all()
+            member_list = [{
+                'id': member.id,
+                'MSSV': member.MSSV,
+                'name': member.name,
+                'specialist': member.specialist,
+                'role': member.role,
+                'IDcard': member.IDcard,
+                'UID': member.UID,
+                'email': member.email,
+                'checkin_time': member.checkin_time,
+                'state': member.state
+            } for member in members]
+            emit('members_list', member_list)
+    except Exception as e:
+        logging.error(f"Error handling update request: {e}")
         emit('error', {'message': f'Internal server error: {str(e)}'})
 
 if __name__ == '__main__':

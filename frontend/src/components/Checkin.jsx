@@ -69,14 +69,27 @@ const Checkin = () => {
       }
     } catch (error) {
       console.error('Check-in error:', error);
-      const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Unable to check-in. Please try again.';
-      toast({
-        title: "Check-in failed",
-        description: errorMessage,
-        status: "error",
-        duration: 3000,
-        isClosable: true,
-      });
+      const errorResponse = error.response?.data || {};
+      
+      // Handle specific error for interview in progress
+      if (errorResponse.message && errorResponse.message.includes("interview")) {
+        toast({
+          title: "Check-in failed",
+          description: "Member is currently in an interview and cannot check in",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+        });
+      } else {
+        const errorMessage = errorResponse.message || errorResponse.error || 'Unable to check-in. Please try again.';
+        toast({
+          title: "Check-in failed",
+          description: errorMessage,
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+        });
+      }
     } finally {
       setLoading(false);
     }
