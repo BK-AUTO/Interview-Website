@@ -45,17 +45,21 @@ const Checkin = () => {
         const { name, specialist, checkin_time } = response.data.member;
         
         // Format the date for display
-        let formattedTime = checkin_time;
+        let formattedTime = checkin_time || new Date().toLocaleString();
         try {
-          const date = new Date(checkin_time);
-          formattedTime = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')} ${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+          if (checkin_time) {
+            const date = new Date(checkin_time);
+            if (!isNaN(date.getTime())) {
+              formattedTime = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')} ${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+            }
+          }
         } catch (e) {
           console.error('Error formatting date:', e);
         }
         
         toast({
           title: `${name} check-in thành công`,
-          description: `Thành viên ${name} mảng ${specialist} đã check-in vào lúc ${formattedTime}`,
+          description: `Thành viên ${name} mảng ${specialist || 'chưa xác định'} đã check-in vào lúc ${formattedTime}`,
           status: "success",
           duration: 5000,
           isClosable: true,
@@ -65,7 +69,7 @@ const Checkin = () => {
       }
     } catch (error) {
       console.error('Check-in error:', error);
-      const errorMessage = error.response?.data?.message || 'Unable to check-in. Please try again.';
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Unable to check-in. Please try again.';
       toast({
         title: "Check-in failed",
         description: errorMessage,

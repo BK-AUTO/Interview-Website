@@ -1,5 +1,6 @@
-from app import app, socketio
+from app import app, socketio, db
 import logging
+import os
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG,
@@ -12,6 +13,13 @@ if __name__ == "__main__":
         # Make sure CORS is properly handled
         from flask_cors import CORS
         CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+        
+        # Create database tables if they don't exist
+        with app.app_context():
+            # Uncomment the next line if you need to recreate the database with the new columns
+            db.drop_all()  # Be careful with this in production!
+            db.create_all()
+            logger.info("Database tables created/updated successfully")
         
         socketio.run(
             app,

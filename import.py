@@ -2,7 +2,7 @@ import csv
 import sqlite3
 
 # Assuming your database file is named 'interviewer.db'
-db_file = 'memberlist.db'
+db_file = 'backend/instance/memberlist.db'
 
 def create_table(conn):
     """Creates the Member table if it doesn't exist."""

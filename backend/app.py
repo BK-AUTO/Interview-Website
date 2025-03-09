@@ -10,6 +10,9 @@ from flask_jwt_extended import JWTManager, create_access_token, jwt_required, ge
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///memberlist.db'
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'connect_args': {'check_same_thread': False}
+}
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config['JWT_SECRET_KEY'] = 'jwt-secret-string'  # Change this to a random secret key
 
@@ -32,6 +35,9 @@ class Member(db.Model):
     specialist = db.Column(db.String(100))
     role = db.Column(db.String(100))
     IDcard = db.Column(db.String(100))
+    # Add these columns to the model
+    checkin_time = db.Column(db.String(100), nullable=True)
+    state = db.Column(db.String(100), nullable=True)
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -180,24 +186,14 @@ def delete_member(id):
 def checkin_member():
     try:
         data = request.get_json()
-        uid = data.get('uid')  # Change from MSSV to uid
+        uid = data.get('uid')
         
-        # Try to find member by both MSSV and IDcard
-        member = Member.query.filter_by(MSSV=uid).first()
-        if not member:
-            member = Member.query.filter_by(IDcard=uid).first()
+        # Find member by MSSV or IDcard
+        member = Member.query.filter_by(MSSV=uid).first() or Member.query.filter_by(IDcard=uid).first()
             
         if member:
-            # Check if Member model has checkin_time and state columns, add them if not
-            if not hasattr(member, 'checkin_time'):
-                with app.app_context():
-                    db.engine.execute('ALTER TABLE member ADD COLUMN checkin_time TEXT')
-                    
-            if not hasattr(member, 'state'):
-                with app.app_context():
-                    db.engine.execute('ALTER TABLE member ADD COLUMN state TEXT')
-                    
-            member.checkin_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            member.checkin_time = current_time
             member.state = 'Đã checkin'
             db.session.commit()
             
@@ -211,7 +207,6 @@ def checkin_member():
                 'checkin_time': member.checkin_time,
                 'state': member.state
             })
-            
             logging.info(f"Member checked in: {member.name}")
             return jsonify({'message': 'Check-in successful', 'member': {
                 'id': member.id,
