@@ -4,18 +4,31 @@ services:
     build:
       context: ./frontend
     ports:
-      - "3000:3000"
-    command: ["npm", "run", "start"]
+      - "5173:5173"
     volumes:
       - ./frontend:/app
-    working_dir: /app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:5000
+    depends_on:
+      - backend
+    networks:
+      - app-network
 
   backend:
     build:
       context: ./backend
     ports:
       - "5000:5000"
-    command: ["python", "wsgi.py"]
     volumes:
       - ./backend:/app
-    working_dir: /app
+    environment:
+      - FLASK_ENV=development
+      - FLASK_APP=wsgi.py
+      - DATABASE_URL=sqlite:///app.db
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
