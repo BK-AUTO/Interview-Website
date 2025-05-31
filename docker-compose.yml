@@ -4,12 +4,12 @@ services:
     build:
       context: ./frontend
     ports:
-      - "5173:5173"
+      - "5200:5200"
     volumes:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://localhost:5000
+      - VITE_API_URL=https://checkin.bkauto.vn/api
     depends_on:
       - backend
     networks:

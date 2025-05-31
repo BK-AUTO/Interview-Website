@@ -15,7 +15,7 @@ COPY . .
 # Remove any existing node_modules to prevent conflicts
 RUN rm -rf node_modules && npm install
 
-EXPOSE 5173
+EXPOSE 5200
 
 # Use dev script with host flag for Docker
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
