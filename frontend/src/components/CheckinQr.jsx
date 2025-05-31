@@ -82,7 +82,16 @@ const Checkin = () => {
       if (response.ok) {
         const { name, checkin_time, speciality } = data.member;
         const date = new Date(checkin_time);
-        const formattedTime = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')} ${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+        const formattedTime = date.toLocaleString('vi-VN', {
+          timeZone: 'Asia/Ho_Chi_Minh',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        });
         toast({
           title: `${name} check-in thành công`,
           description: `Thành viên ${name} mảng ${speciality} đã check-in vào lúc ${formattedTime}`,

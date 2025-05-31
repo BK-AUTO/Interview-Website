@@ -1,37 +1,26 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Box,
-  Flex,
-  Tabs,
-  TabPanels,
-  TabPanel,
   useColorModeValue,
-  Drawer,
-  DrawerContent,
-  useBreakpointValue,
   useToast
 } from '@chakra-ui/react';
 import Navbar from './components/Navbar';
 import Management from './components/Management';
-import WebsiteManagement from './components/WebsiteManagement';
-import Sidebar from './components/Sidebar';
+import StatisticsPage from './components/StatisticsPage';
+import ViewSelection from './components/ViewSelection';
 import Login from './components/Login';
 import Register from './components/Register';
 import api from './api/axios';
 import { BASE_URL } from './config';
 import { io } from "socket.io-client"; // Import socket.io-client
-import InterviewTracker from './components/InterviewTracker';
 
 function App() {
   const [members, setMembers] = useState([]);
-  const [activeTab, setActiveTab] = useState(0);
-  const [isSidebarMinimized, setIsSidebarMinimized] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [currentView, setCurrentView] = useState(null); // null (chưa chọn), 'checkin', 'statistics'
   const toast = useToast();
   const socketRef = useRef(null);
-
-  const isDesktop = useBreakpointValue({ base: false, lg: true });
 
   // Initialize WebSocket connection when authenticated
   useEffect(() => {
@@ -127,58 +116,7 @@ function App() {
             status: "success",
             duration: 3000,
             isClosable: true,
-          });
-        });
-        
-        socket.on('member_interview_called', (interviewMember) => {
-          console.log('Member called for interview:', interviewMember);
-          setMembers(prevMembers => 
-            prevMembers.map(member => 
-              member.id === interviewMember.id ? interviewMember : member
-            )
-          );
-          toast({
-            title: "Interview Call",
-            description: `${interviewMember.name} has been called for interview.`,
-            status: "warning",
-            duration: 3000,
-            isClosable: true,
-            position: "top",
-          });
-        });
-
-        socket.on('member_interview_started', (interviewMember) => {
-          console.log('Interview started for member:', interviewMember);
-          setMembers(prevMembers => 
-            prevMembers.map(member => 
-              member.id === interviewMember.id ? interviewMember : member
-            )
-          );
-          toast({
-            title: "Interview Started",
-            description: `${interviewMember.name}'s interview has begun.`,
-            status: "warning",
-            duration: 3000,
-            isClosable: true,
-            position: "top",
-          });
-        });
-
-        socket.on('member_interview_ended', (interviewEndedMember) => {
-          console.log('Interview ended for member:', interviewEndedMember);
-          setMembers(prevMembers => 
-            prevMembers.map(member => 
-              member.id === interviewEndedMember.id ? interviewEndedMember : member
-            )
-          );
-          toast({
-            title: "Interview Completed",
-            description: `${interviewEndedMember.name}'s interview has been completed.`,
-            status: "success",
-            duration: 3000,
-            isClosable: true,
-          });
-        });
+          });        });
         
         socket.on('members_list', (membersList) => {
           console.log('Received updated members list:', membersList);
@@ -220,6 +158,18 @@ function App() {
     }
   }, [isAuthenticated, toast]);
 
+  // Function để xử lý việc chọn giao diện
+  const handleViewSelection = (viewType) => {
+    setCurrentView(viewType);
+    toast({
+      title: "Chuyển giao diện thành công",
+      description: `Đã chuyển sang giao diện ${viewType === 'checkin' ? 'Check-in' : 'Thống kê'}`,
+      status: "success",
+      duration: 3000,
+      isClosable: true,
+    });
+  };
+
   if (!isAuthenticated) {
     return isRegistering ? (
       <Register setIsAuthenticated={setIsAuthenticated} />
@@ -228,50 +178,31 @@ function App() {
     );
   }
 
+  // Hiển thị màn hình chọn giao diện nếu chưa chọn
+  if (!currentView) {
+    return <ViewSelection onSelectView={handleViewSelection} />;
+  }
+
   return (
     <Box h="100vh" overflow="hidden">
-      <Navbar />
-      <Flex h="calc(100vh - 60px)">
-        {isDesktop ? (
-          <Sidebar
-            isSidebarMinimized={isSidebarMinimized}
-            setIsSidebarMinimized={setIsSidebarMinimized}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
+      <Navbar 
+        currentView={currentView}
+        onViewStatistics={() => setCurrentView('statistics')}
+        onBackToCheckin={() => setCurrentView('checkin')}
+        onBackToSelection={() => setCurrentView(null)}
+      />
+      <Box p={4} bg={useColorModeValue("gray.50", "gray.800")} overflowY="auto" h="calc(100vh - 120px)">
+        {currentView === 'checkin' ? (
+          <Management 
+            members={members} 
+            setMembers={setMembers}
           />
         ) : (
-          <Drawer
-            isOpen={!isSidebarMinimized}
-            placement="left"
-            onClose={() => setIsSidebarMinimized(true)}
-          >
-            <DrawerContent>
-              <Sidebar
-                isSidebarMinimized={isSidebarMinimized}
-                setIsSidebarMinimized={setIsSidebarMinimized}
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-              />
-            </DrawerContent>
-          </Drawer>
+          <StatisticsPage 
+            members={members}
+          />
         )}
-        
-        <Box flex="1" p={4} bg={useColorModeValue("gray.50", "gray.800")} overflowY="auto">
-          <Tabs index={activeTab} onChange={setActiveTab} variant="unstyled">
-            <TabPanels>
-              <TabPanel>
-                <Management members={members} setMembers={setMembers} />
-              </TabPanel>
-              <TabPanel>
-                <InterviewTracker members={members} />
-              </TabPanel>
-              <TabPanel>
-                <WebsiteManagement setActiveTab={setActiveTab} />
-              </TabPanel>
-            </TabPanels>
-          </Tabs>
-        </Box>
-      </Flex>
+      </Box>
     </Box>
   );
 }
