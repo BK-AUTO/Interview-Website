@@ -9,7 +9,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=https://checkin.bkauto.vn/api
+      - VITE_API_URL=https://checkin.bkauto.vn/
     depends_on:
       - backend
     networks:
