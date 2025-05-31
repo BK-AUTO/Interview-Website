@@ -1,21 +1,33 @@
-FROM node:18-alpine
+# Build stage
+FROM node:20-alpine AS build
 
-WORKDIR /app
+WORKDIR /build
 
 # Copy package files
-COPY package*.json ./
+COPY package.json package-lock.json ./
 
-# Install dependencies
-RUN npm install
+# Install all dependencies (including dev dependencies needed for build)
+RUN npm ci
 
-# Copy the rest of the application code
-# Exclude node_modules and other unnecessary files
+# Copy source files
 COPY . .
 
-# Remove any existing node_modules to prevent conflicts
-RUN rm -rf node_modules && npm install
+# Build the application
+RUN npm run build
 
+# Production stage - lighter image
+FROM node:20-alpine AS production
+
+WORKDIR /frontend
+
+# Install serve for lightweight serving
+RUN npm install -g serve@latest
+
+# Copy built assets from build stage
+COPY --from=build /build/dist ./dist
+
+# Expose port
 EXPOSE 5200
 
-# Use dev script with host flag for Docker
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+# Run with serve
+CMD ["serve", "-s", "dist", "-l", "5200"]

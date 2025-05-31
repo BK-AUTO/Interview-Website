@@ -3,11 +3,9 @@ services:
   frontend:
     build:
       context: ./frontend
+      target: production
     ports:
       - "5200:5200"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
     environment:
       - VITE_API_URL=https://checkin.bkauto.vn/
     depends_on:
