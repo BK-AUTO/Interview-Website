@@ -9,13 +9,12 @@ COPY package*.json ./
 RUN npm install
 
 # Copy the rest of the application code
-# Exclude node_modules and other unnecessary files
 COPY . .
 
-# Remove any existing node_modules to prevent conflicts
-RUN rm -rf node_modules && npm install
+# Build for production
+RUN npm run build
 
-EXPOSE 5173
+EXPOSE 5700
 
-# Use dev script with host flag for Docker
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+# Use preview for production build
+CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "5700"]

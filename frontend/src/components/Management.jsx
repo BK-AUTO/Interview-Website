@@ -124,8 +124,7 @@ const Management = ({ members, setMembers }) => {
       name: '',
       MSSV: '',
       specialist: '',
-      role: '',
-      IDcard: '',
+      linkCV: '',
       state: '',
       checkin_time: ''
     });
@@ -144,10 +143,10 @@ const Management = ({ members, setMembers }) => {
       name: selectedMember.name || '',
       MSSV: selectedMember.MSSV || '',
       specialist: selectedMember.specialist || '',
-      role: selectedMember.role || '',
-      IDcard: selectedMember.IDcard || '',
+      linkCV: selectedMember.linkCV || '',
       state: selectedMember.state || '',
-      checkin_time: selectedMember.checkin_time || ''
+      checkin_time: selectedMember.checkin_time || '',
+      note: selectedMember.note || ''
     };
 
     if (selectedMember.id) {
@@ -272,7 +271,7 @@ const Management = ({ members, setMembers }) => {
           bgGradient={'linear(to-r, pink.400, purple.500)'}
           bgClip={'text'}
         >
-          Member Management
+          Quản lý ứng viên
         </Text>
       </Text>
 
@@ -316,21 +315,22 @@ const Management = ({ members, setMembers }) => {
                 MSSV {getSortIcon('MSSV')}
               </Th>
               <Th onClick={() => requestSort('name')} borderRadius="md">
-                Name {getSortIcon('name')}
+                Họ tên {getSortIcon('name')}
               </Th>
               <Th onClick={() => requestSort('specialist')} borderRadius="md">
-                Speciality {getSortIcon('specialist')}
+                Mảng chính {getSortIcon('specialist')}
               </Th>
-              {/* <Th onClick={() => requestSort('role')} borderRadius="md">
-                Role {getSortIcon('role')}
-              </Th> */}
+              <Th onClick={() => requestSort('linkCV')} borderRadius="md">
+                linkCV {getSortIcon('linkCV')}
+              </Th>
               <Th onClick={() => requestSort('state')} borderRadius="md">
-                Status {getSortIcon('state')}
+                Trạng thái {getSortIcon('state')}
               </Th>
               <Th onClick={() => requestSort('checkin_time')} borderRadius="md">
-                Check-in Time {getSortIcon('checkin_time')}
+                Thời gian check-in {getSortIcon('checkin_time')}
               </Th>
               <Th borderRadius="md">Action</Th>
+              <Th borderRadius="md">Ghi chú</Th>
             </Tr>
           </Thead>
           <Tbody borderRadius="md">
@@ -339,7 +339,15 @@ const Management = ({ members, setMembers }) => {
                 <Td borderRadius="md">{member.MSSV}</Td>
                 <Td minWidth="200px" borderRadius="md">{member.name}</Td>
                 <Td borderRadius="md">{member.specialist}</Td>
-                {/* <Td borderRadius="md">{member.role}</Td> */}
+                <Td borderRadius="md">
+                  {member.linkCV ? (
+                    <a href={member.linkCV} target="_blank" rel="noopener noreferrer" style={{ color: '#3182ce', textDecoration: 'underline' }}>
+                      CV
+                    </a>
+                  ) : (
+                    'N/A'
+                  )}
+                </Td>
                 <Td borderRadius="md">
                   {member.state && (
                     <Text
@@ -382,6 +390,7 @@ const Management = ({ members, setMembers }) => {
                     </Button>
                   ) : null}
                 </Td>
+                <Td borderRadius="md">{member.note || 'N/A'}</Td>
               </Tr>
             ))}
           </Tbody>
@@ -419,21 +428,14 @@ const Management = ({ members, setMembers }) => {
               borderRadius="md"
             />
             <Input
-              placeholder="Role"
-              name="role"
-              value={selectedMember?.role || ''}
+              placeholder="Ghi chú"
+              name="note"
+              value={selectedMember?.note || ''}
               onChange={handleInputChange}
               mb={2}
               borderRadius="md"
             />
-            <Input
-              placeholder="ID Card"
-              name="IDcard"
-              value={selectedMember?.IDcard || ''}
-              onChange={handleInputChange}
-              mb={2}
-              borderRadius="md"
-            />
+
           </ModalBody>
           <ModalFooter borderRadius="md">
             <Button colorScheme="blue" mr={3} onClick={handleModalSave} borderRadius="md">

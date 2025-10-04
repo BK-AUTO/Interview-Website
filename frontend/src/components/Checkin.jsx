@@ -44,22 +44,12 @@ const Checkin = () => {
       if (response.data && response.data.member) {
         const { name, specialist, checkin_time } = response.data.member;
         
-        // Format the date for display
-        let formattedTime = checkin_time || new Date().toLocaleString();
-        try {
-          if (checkin_time) {
-            const date = new Date(checkin_time);
-            if (!isNaN(date.getTime())) {
-              formattedTime = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')} ${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
-            }
-          }
-        } catch (e) {
-          console.error('Error formatting date:', e);
-        }
+        // Display the time as received from backend (already in GMT+7)
+        const displayTime = checkin_time || 'N/A';
         
         toast({
           title: `${name} check-in thành công`,
-          description: `Thành viên ${name} mảng ${specialist || 'chưa xác định'} đã check-in vào lúc ${formattedTime}`,
+          description: `Thành viên ${name} mảng ${specialist || 'chưa xác định'} đã check-in vào lúc ${displayTime}`,
           status: "success",
           duration: 5000,
           isClosable: true,
@@ -104,14 +94,14 @@ const Checkin = () => {
       <Modal isOpen={isOpen} onClose={onClose}>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>Check-in Page</ModalHeader>
+          <ModalHeader>Check-in</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
             <Flex alignItems={"center"} justifyContent={"center"}>
               <FormControl>
-                <FormLabel>UID</FormLabel>
+                <FormLabel>MSSV</FormLabel>
                 <Input 
-                  placeholder='Nhập UID được gửi trong mail của bạn'
+                  placeholder='Nhập MSSV của bạn'
                   value={uid}
                   onChange={(e) => setUid(e.target.value)}
                 />
@@ -124,11 +114,11 @@ const Checkin = () => {
               mr={3} 
               onClick={handleCheckin} 
               isLoading={loading}
-              loadingText="Checking in..."
+              loadingText="Đang checkin..."
             >
               Check-in
             </Button>
-            <Button variant="ghost" onClick={onClose} isDisabled={loading}>Cancel</Button>
+            <Button variant="ghost" onClick={onClose} isDisabled={loading}>Hủy</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

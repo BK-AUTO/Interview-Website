@@ -1,33 +1,31 @@
-version: '3.8'
 services:
   frontend:
     build:
       context: ./frontend
     ports:
-      - "5173:5173"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - "5700:5700"
     environment:
-      - VITE_API_URL=http://localhost:5000
+      - VITE_API_URL=http://localhost:8000
     depends_on:
       - backend
     networks:
       - app-network
+    restart: unless-stopped
 
   backend:
     build:
       context: ./backend
     ports:
-      - "5000:5000"
+      - "8091:8091"
     volumes:
-      - ./backend:/app
+      - ./instance:/app/instance
     environment:
-      - FLASK_ENV=development
+      - FLASK_ENV=production
       - FLASK_APP=wsgi.py
-      - DATABASE_URL=sqlite:///app.db
+      - DATABASE_URL=sqlite:///instance/memberlist.db
     networks:
       - app-network
+    restart: unless-stopped
 
 networks:
   app-network:

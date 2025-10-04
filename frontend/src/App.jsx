@@ -122,8 +122,8 @@ function App() {
             )
           );
           toast({
-            title: "Member Checked In",
-            description: `${checkedInMember.name} has checked in.`,
+            title: "Ứng viên checkin",
+            description: `${checkedInMember.name} đã checkin thành công.`,
             status: "success",
             duration: 3000,
             isClosable: true,
@@ -138,8 +138,8 @@ function App() {
             )
           );
           toast({
-            title: "Interview Call",
-            description: `${interviewMember.name} has been called for interview.`,
+            title: "Gọi phỏng vấn",
+            description: `${interviewMember.name} đã được gọi phỏng vấn. Mời bạn di chuyển lên tầng 2.`,
             status: "warning",
             duration: 3000,
             isClosable: true,
@@ -155,8 +155,8 @@ function App() {
             )
           );
           toast({
-            title: "Interview Started",
-            description: `${interviewMember.name}'s interview has begun.`,
+            title: "Phỏng vấn bắt đầu",
+            description: `${interviewMember.name} mảng ${interviewMember.specialist} bắt đầu phỏng vấn.`,
             status: "warning",
             duration: 3000,
             isClosable: true,
@@ -172,8 +172,8 @@ function App() {
             )
           );
           toast({
-            title: "Interview Completed",
-            description: `${interviewEndedMember.name}'s interview has been completed.`,
+            title: "Ứng viên đã phỏng vấn xong",
+            description: `${interviewEndedMember.name} đã hoàn thành phỏng vấn`,
             status: "success",
             duration: 3000,
             isClosable: true,
