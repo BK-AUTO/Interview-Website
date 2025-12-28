@@ -51,15 +51,30 @@ logging.basicConfig(level=logging.DEBUG,
 
 class Member(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100))
-    MSSV = db.Column(db.String(10))
-    khoa = db.Column(db.String(100))  # Course/Year
-    organization = db.Column(db.String(100))  # Organization/Source
-    join_year = db.Column(db.String(100))  # Year joined
-    former_role = db.Column(db.String(100))  # Former role in club
-    lottery_number = db.Column(db.Integer, nullable=True)  # Lottery number
+    name = db.Column(db.String(100), nullable=False)
+    khoa = db.Column(db.String(50))  # K61, K62, ..., K70, NCS
+    MSSV = db.Column(db.String(20))
+    participation_type = db.Column(db.String(50))  # Phần lễ, Phần hội, Cả hai
+    member_type = db.Column(db.String(20))  # CSV (cựu SV) / CURRENT (SV hiện tại)
     checkin_time = db.Column(db.String(100), nullable=True)
-    state = db.Column(db.String(100), nullable=True)
+    state = db.Column(db.String(100), default='Chưa checkin')
+    checkin_ceremony = db.Column(db.Boolean, default=False)  # Đã check-in phần lễ
+    checkin_party = db.Column(db.Boolean, default=False)  # Đã check-in phần hội
+
+def member_to_dict(member):
+    """Convert member object to dictionary"""
+    return {
+        'id': member.id,
+        'name': member.name,
+        'khoa': member.khoa,
+        'MSSV': member.MSSV,
+        'participation_type': member.participation_type,
+        'member_type': member.member_type,
+        'checkin_time': member.checkin_time,
+        'state': member.state,
+        'checkin_ceremony': member.checkin_ceremony,
+        'checkin_party': member.checkin_party
+    }
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -99,71 +114,39 @@ def login():
     return jsonify({'access_token': access_token}), 200
 
 @app.route('/api/members', methods=['GET'])
-# @jwt_required()
 def get_members():
     try:
         members = Member.query.all()
-        return jsonify([{
-            'id': member.id,
-            'MSSV': member.MSSV,
-            'name': member.name,
-            'khoa': member.khoa,
-            'organization': member.organization,
-            'join_year': member.join_year,
-            'former_role': member.former_role,
-            'lottery_number': member.lottery_number,
-            'checkin_time': member.checkin_time,
-            'state': member.state
-        } for member in members])
+        return jsonify([member_to_dict(member) for member in members])
     except Exception as e:
         logging.error(f"Error getting members: {e}")
         return jsonify({'error': str(e)}), 500
 
-# @jwt_required()
 @app.route('/api/members', methods=['POST'])
 def add_member():
     try:
         data = request.get_json()
         new_member = Member(
             name=data['name'],
-            MSSV=data.get('MSSV'),
             khoa=data.get('khoa'),
-            organization=data.get('organization'),
-            join_year=data.get('join_year'),
-            former_role=data.get('former_role'),
-            lottery_number=data.get('lottery_number'),
-            state='Chưa checkin'
+            MSSV=data.get('MSSV'),
+            participation_type=data.get('participation_type'),
+            member_type=data.get('member_type', 'CURRENT'),
+            state='Chưa checkin',
+            checkin_ceremony=False,
+            checkin_party=False
         )
         db.session.add(new_member)
         db.session.commit()
-        socketio.emit('member_added', {
-            'id': new_member.id,
-            'MSSV': new_member.MSSV,
-            'name': new_member.name,
-            'khoa': new_member.khoa,
-            'organization': new_member.organization,
-            'join_year': new_member.join_year,
-            'former_role': new_member.former_role,
-            'lottery_number': new_member.lottery_number,
-            'state': new_member.state
-        })
+        
+        member_data = member_to_dict(new_member)
+        socketio.emit('member_added', member_data)
         logging.info(f"Member added: {new_member.name}")
-        return jsonify({'message': 'Member added successfully', 'member': {
-            'id': new_member.id,
-            'MSSV': new_member.MSSV,
-            'name': new_member.name,
-            'khoa': new_member.khoa,
-            'organization': new_member.organization,
-            'join_year': new_member.join_year,
-            'former_role': new_member.former_role,
-            'lottery_number': new_member.lottery_number,
-            'state': new_member.state
-        }}), 201
+        return jsonify({'message': 'Member added successfully', 'member': member_data}), 201
     except Exception as e:
         logging.error(f"Error adding member: {e}")
         return jsonify({'error': str(e)}), 500
 
-# @jwt_required()
 @app.route('/api/members/<int:id>', methods=['PUT'])
 def edit_member(id):
     try:
@@ -172,16 +155,20 @@ def edit_member(id):
         if member:
             # Update member data
             member.name = data.get('name', member.name)
-            member.MSSV = data.get('MSSV', member.MSSV)
             member.khoa = data.get('khoa', member.khoa)
-            member.organization = data.get('organization', member.organization)
-            member.join_year = data.get('join_year', member.join_year)
-            member.former_role = data.get('former_role', member.former_role)
-            member.lottery_number = data.get('lottery_number', member.lottery_number)
+            member.MSSV = data.get('MSSV', member.MSSV)
+            member.participation_type = data.get('participation_type', member.participation_type)
+            member.member_type = data.get('member_type', member.member_type)
             
-            # Handle state and checkin_time updates
+            # Handle state and checkin updates
             new_state = data.get('state', member.state)
             new_checkin_time = data.get('checkin_time', member.checkin_time)
+            
+            # Update ceremony/party checkin flags
+            if 'checkin_ceremony' in data:
+                member.checkin_ceremony = data['checkin_ceremony']
+            if 'checkin_party' in data:
+                member.checkin_party = data['checkin_party']
             
             # If state changes to "Đã checkin" and no checkin_time provided, set current time
             if new_state == 'Đã checkin' and not new_checkin_time:
@@ -198,20 +185,7 @@ def edit_member(id):
             
             db.session.commit()
             
-            # Create response data
-            member_data = {
-                'id': member.id,
-                'MSSV': member.MSSV,
-                'name': member.name,
-                'khoa': member.khoa,
-                'organization': member.organization,
-                'join_year': member.join_year,
-                'former_role': member.former_role,
-                'lottery_number': member.lottery_number,
-                'state': member.state,
-                'checkin_time': member.checkin_time
-            }
-            
+            member_data = member_to_dict(member)
             socketio.emit('member_edited', member_data)
             logging.info(f"Member edited: {member.name}")
             return jsonify({'message': 'Member edited successfully', 'member': member_data})
@@ -221,7 +195,6 @@ def edit_member(id):
         logging.error(f"Error editing member: {e}")
         return jsonify({'error': str(e)}), 500
 
-# @jwt_required()
 @app.route('/api/members/<int:id>', methods=['DELETE'])
 def delete_member(id):
     try:
@@ -243,57 +216,41 @@ def checkin_member():
     try:
         data = request.get_json()
         uid = data.get('uid')
-        lottery_number = data.get('lottery_number')
-        
-        # Validate lottery number is provided
-        if not lottery_number:
-            return jsonify({'message': 'Lottery number is required for check-in'}), 400
+        checkin_type = data.get('checkin_type', 'both')  # 'ceremony', 'party', 'both'
             
         # Try to find member by MSSV or name
         member = Member.query.filter_by(MSSV=uid).first() or \
                  Member.query.filter_by(name=uid).first()
             
         if member:
-            # Check if member has already checked in
-            if member.state == 'Đã checkin':
-                logging.warning(f"Member {member.name} has already checked in")
-                return jsonify({
-                    'message': 'Member has already checked in'
-                }), 400
-                
-            # Use Vietnam timezone for check-in time
-            current_time = format_vn_time()
-            member.checkin_time = current_time
-            member.state = 'Đã checkin'
-            member.lottery_number = lottery_number
+            # Update check-in flags based on type
+            if checkin_type == 'ceremony':
+                if member.checkin_ceremony:
+                    return jsonify({'message': 'Thành viên đã check-in phần lễ rồi'}), 400
+                member.checkin_ceremony = True
+            elif checkin_type == 'party':
+                if member.checkin_party:
+                    return jsonify({'message': 'Thành viên đã check-in phần hội rồi'}), 400
+                member.checkin_party = True
+            else:  # both
+                if member.checkin_ceremony and member.checkin_party:
+                    return jsonify({'message': 'Thành viên đã check-in cả hai phần rồi'}), 400
+                member.checkin_ceremony = True
+                member.checkin_party = True
+            
+            # Update overall state
+            if member.checkin_ceremony or member.checkin_party:
+                member.state = 'Đã checkin'
+                if not member.checkin_time:
+                    member.checkin_time = format_vn_time()
+            
             db.session.commit()
             
-            socketio.emit('member_checked_in', {
-                'id': member.id,
-                'MSSV': member.MSSV,
-                'name': member.name,
-                'khoa': member.khoa,
-                'organization': member.organization,
-                'join_year': member.join_year,
-                'former_role': member.former_role,
-                'lottery_number': member.lottery_number,
-                'checkin_time': member.checkin_time,
-                'state': member.state
-            })
+            member_data = member_to_dict(member)
+            socketio.emit('member_checked_in', member_data)
             
-            logging.info(f"Member checked in: {member.name}")
-            return jsonify({'message': 'Check-in successful', 'member': {
-                'id': member.id,
-                'MSSV': member.MSSV,
-                'name': member.name,
-                'khoa': member.khoa,
-                'organization': member.organization,
-                'join_year': member.join_year,
-                'former_role': member.former_role,
-                'lottery_number': member.lottery_number,
-                'checkin_time': member.checkin_time,
-                'state': member.state
-            }})
+            logging.info(f"Member checked in: {member.name} ({checkin_type})")
+            return jsonify({'message': 'Check-in successful', 'member': member_data})
         else:
             logging.warning(f"Member not found with uid: {uid}")
             return jsonify({'message': 'Member not found'}), 404
@@ -301,7 +258,6 @@ def checkin_member():
         logging.error(f"Error checking in member: {e}")
         return jsonify({'error': str(e)}), 500
 
-# @jwt_required()
 @app.route('/api/esp/checkin', methods=['POST'])
 def checkin_member_esp():
     try:
@@ -312,36 +268,80 @@ def checkin_member_esp():
             # Use Vietnam timezone for ESP check-in
             member.checkin_time = format_vn_time()
             member.state = 'Đã checkin'
+            member.checkin_ceremony = True
+            member.checkin_party = True
             db.session.commit()
-            socketio.emit('member_checked_in', {
-                'id': member.id,
-                'MSSV': member.MSSV,
-                'name': member.name,
-                'khoa': member.khoa,
-                'organization': member.organization,
-                'join_year': member.join_year,
-                'former_role': member.former_role,
-                'lottery_number': member.lottery_number,
-                'checkin_time': member.checkin_time,
-                'state': member.state
-            })
+            
+            member_data = member_to_dict(member)
+            socketio.emit('member_checked_in', member_data)
             logging.info(f"Member checked in (ESP): {member.name}")
-            return jsonify({'message': 'Check-in successful', 'member': {
-                'id': member.id,
-                'MSSV': member.MSSV,
-                'name': member.name,
-                'khoa': member.khoa,
-                'organization': member.organization,
-                'join_year': member.join_year,
-                'former_role': member.former_role,
-                'lottery_number': member.lottery_number,
-                'checkin_time': member.checkin_time,
-                'state': member.state
-            }})
+            return jsonify({'message': 'Check-in successful', 'member': member_data})
         else:
             return jsonify({'message': 'Member not found'}), 404
     except Exception as e:
         logging.error(f"Error checking in member (ESP): {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/statistics', methods=['GET'])
+def get_statistics():
+    """Get detailed statistics for YEP 2025"""
+    try:
+        members = Member.query.all()
+        
+        total = len(members)
+        checked_in = len([m for m in members if m.state == 'Đã checkin'])
+        ceremony_checked = len([m for m in members if m.checkin_ceremony])
+        party_checked = len([m for m in members if m.checkin_party])
+        
+        # Stats by khoa
+        khoa_stats = {}
+        for member in members:
+            khoa = member.khoa or 'Không xác định'
+            if khoa not in khoa_stats:
+                khoa_stats[khoa] = {'total': 0, 'checked_in': 0, 'ceremony': 0, 'party': 0}
+            khoa_stats[khoa]['total'] += 1
+            if member.state == 'Đã checkin':
+                khoa_stats[khoa]['checked_in'] += 1
+            if member.checkin_ceremony:
+                khoa_stats[khoa]['ceremony'] += 1
+            if member.checkin_party:
+                khoa_stats[khoa]['party'] += 1
+        
+        # Stats by member type
+        type_stats = {'CSV': {'total': 0, 'checked_in': 0}, 'CURRENT': {'total': 0, 'checked_in': 0}}
+        for member in members:
+            mtype = member.member_type or 'CURRENT'
+            if mtype not in type_stats:
+                type_stats[mtype] = {'total': 0, 'checked_in': 0}
+            type_stats[mtype]['total'] += 1
+            if member.state == 'Đã checkin':
+                type_stats[mtype]['checked_in'] += 1
+        
+        # Stats by participation type
+        participation_stats = {}
+        for member in members:
+            ptype = member.participation_type or 'Không xác định'
+            if ptype not in participation_stats:
+                participation_stats[ptype] = {'total': 0, 'checked_in': 0, 'ceremony': 0, 'party': 0}
+            participation_stats[ptype]['total'] += 1
+            if member.state == 'Đã checkin':
+                participation_stats[ptype]['checked_in'] += 1
+            if member.checkin_ceremony:
+                participation_stats[ptype]['ceremony'] += 1
+            if member.checkin_party:
+                participation_stats[ptype]['party'] += 1
+        
+        return jsonify({
+            'total': total,
+            'checked_in': checked_in,
+            'ceremony_checked': ceremony_checked,
+            'party_checked': party_checked,
+            'khoa_stats': khoa_stats,
+            'type_stats': type_stats,
+            'participation_stats': participation_stats
+        })
+    except Exception as e:
+        logging.error(f"Error getting statistics: {e}")
         return jsonify({'error': str(e)}), 500
 
 @socketio.on('connect')
@@ -350,18 +350,7 @@ def handle_connect():
         logging.info("Client connected to SocketIO")
         with app.app_context():
             members = Member.query.all()
-            member_list = [{
-                'id': member.id,
-                'MSSV': member.MSSV,
-                'name': member.name,
-                'khoa': member.khoa,
-                'organization': member.organization,
-                'join_year': member.join_year,
-                'former_role': member.former_role,
-                'lottery_number': member.lottery_number,
-                'checkin_time': member.checkin_time,
-                'state': member.state
-            } for member in members]
+            member_list = [member_to_dict(member) for member in members]
             logging.info(f"Sending members list: {len(member_list)} members")
             emit('members_list', member_list)
     except Exception as e:
@@ -374,18 +363,7 @@ def handle_update_request():
     try:
         with app.app_context():
             members = Member.query.all()
-            member_list = [{
-                'id': member.id,
-                'MSSV': member.MSSV,
-                'name': member.name,
-                'khoa': member.khoa,
-                'organization': member.organization,
-                'join_year': member.join_year,
-                'former_role': member.former_role,
-                'lottery_number': member.lottery_number,
-                'checkin_time': member.checkin_time,
-                'state': member.state
-            } for member in members]
+            member_list = [member_to_dict(member) for member in members]
             emit('members_list', member_list)
     except Exception as e:
         logging.error(f"Error handling update request: {e}")

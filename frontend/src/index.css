@@ -1,9 +1,101 @@
+/* BK-AUTO YEP 2025 - Year End Party Theme */
+
+:root {
+  --yep-orange: #FF6B35;
+  --yep-orange-light: #FF8C5A;
+  --yep-orange-dark: #E55A25;
+  --yep-gold: #FFD700;
+  --yep-blue: #1A5F7A;
+}
+
 body, html {
   height: 100%;
   margin: 0;
-  overflow: hidden; /* Prevent scrolling on the body */
+  overflow: hidden;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 #root {
   height: 100%;
+}
+
+/* Custom scrollbar for YEP theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--yep-orange) 0%, var(--yep-orange-dark) 100%);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--yep-orange-dark);
+}
+
+/* Table hover effects */
+table tbody tr:hover {
+  background-color: rgba(255, 107, 53, 0.08) !important;
+}
+
+/* Button animations */
+button {
+  transition: all 0.2s ease-in-out;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+/* Card animations */
+.chakra-card:hover {
+  box-shadow: 0 10px 40px rgba(255, 107, 53, 0.15);
+}
+
+/* Badge animations */
+.chakra-badge {
+  transition: all 0.2s ease;
+}
+
+/* Modal animations */
+.chakra-modal__content {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Progress bar animations */
+.chakra-progress__track {
+  overflow: hidden;
+}
+
+/* Selection color */
+::selection {
+  background-color: var(--yep-orange);
+  color: white;
+}
+
+/* Focus styles */
+*:focus {
+  outline-color: var(--yep-orange) !important;
+}
+
+/* Smooth transitions globally */
+* {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }

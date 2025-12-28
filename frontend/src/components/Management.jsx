@@ -33,34 +33,51 @@ import {
   FormControl,
   FormLabel,
   VStack,
-  Badge
+  Badge,
+  InputGroup,
+  InputLeftElement,
+  Flex,
+  Tooltip
 } from '@chakra-ui/react';
-import { TriangleDownIcon, TriangleUpIcon, EditIcon, DeleteIcon, ViewIcon, ArrowBackIcon } from '@chakra-ui/icons'; // Import icons
+import { TriangleDownIcon, TriangleUpIcon, EditIcon, DeleteIcon, SearchIcon, CheckIcon } from '@chakra-ui/icons';
 import api from '../api/axios';
-import { BASE_URL } from '../config';
 
 const Management = ({ members, setMembers }) => {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
   const [selectedMember, setSelectedMember] = useState(null);
   const [checkinMember, setCheckinMember] = useState(null);
-  const [lotteryNumber, setLotteryNumber] = useState('');
+  const [checkinType, setCheckinType] = useState('both');
+  const [searchTerm, setSearchTerm] = useState('');
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
   const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
   const { isOpen: isCheckinOpen, onOpen: onCheckinOpen, onClose: onCheckinClose } = useDisclosure();
   const cancelRef = React.useRef();
   const toast = useToast();
 
-  const sortedMembers = [...members].sort((a, b) => {
-    if (a[sortConfig.key] < b[sortConfig.key]) {
+  // Filter members based on search
+  const filteredMembers = members.filter(member => {
+    if (!searchTerm.trim()) return true;
+    const search = searchTerm.toLowerCase();
+    return (
+      member.name?.toLowerCase().includes(search) ||
+      member.MSSV?.toLowerCase().includes(search) ||
+      member.khoa?.toLowerCase().includes(search)
+    );
+  });
+
+  const sortedMembers = [...filteredMembers].sort((a, b) => {
+    if (!sortConfig.key) return 0;
+    const aVal = a[sortConfig.key] || '';
+    const bVal = b[sortConfig.key] || '';
+    if (aVal < bVal) {
       return sortConfig.direction === 'ascending' ? -1 : 1;
     }
-    if (a[sortConfig.key] > b[sortConfig.key]) {
+    if (aVal > bVal) {
       return sortConfig.direction === 'ascending' ? 1 : -1;
     }
     return 0;
   });
 
-  // Use all sorted members instead of filtering
   const displayedMembers = sortedMembers;
 
   const requestSort = (key) => {
@@ -110,14 +127,14 @@ const Management = ({ members, setMembers }) => {
   const openEditModal = (member) => {
     setSelectedMember(member || {
       name: '',
-      MSSV: '',
       khoa: '',
-      organization: '',
-      join_year: '',
-      former_role: '',
-      lottery_number: '',
+      MSSV: '',
+      participation_type: '',
+      member_type: 'CURRENT',
       state: 'Chưa checkin',
-      checkin_time: ''
+      checkin_time: '',
+      checkin_ceremony: false,
+      checkin_party: false
     });
     onEditOpen();
   };
@@ -130,45 +147,40 @@ const Management = ({ members, setMembers }) => {
   const handleModalSave = () => {
     if (!selectedMember) return;
 
-    // Convert datetime-local to the format expected by backend
     let checkinTime = selectedMember.checkin_time;
     if (checkinTime && selectedMember.state === 'Đã checkin') {
-      // Convert from datetime-local format to ISO string
       const date = new Date(checkinTime);
       checkinTime = date.toISOString().slice(0, 19).replace('T', ' ');
     }
 
     const memberData = {
       name: selectedMember.name || '',
-      MSSV: selectedMember.MSSV || '',
       khoa: selectedMember.khoa || '',
-      organization: selectedMember.organization || '',
-      join_year: selectedMember.join_year || '',
-      former_role: selectedMember.former_role || '',
-      lottery_number: selectedMember.lottery_number || null,
+      MSSV: selectedMember.MSSV || '',
+      participation_type: selectedMember.participation_type || '',
+      member_type: selectedMember.member_type || 'CURRENT',
       state: selectedMember.state || 'Chưa checkin',
-      checkin_time: checkinTime || ''
+      checkin_time: checkinTime || '',
+      checkin_ceremony: selectedMember.checkin_ceremony || false,
+      checkin_party: selectedMember.checkin_party || false
     };
 
     if (selectedMember.id) {
-      // Edit existing member
       handleEditMember(selectedMember.id, memberData);
     } else {
-      // Add new member
       handleAddMember(memberData);
     }
     handleModalClose();
   };
 
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     setSelectedMember((prevMember) => {
       const updatedMember = {
         ...prevMember,
-        [name]: value,
+        [name]: type === 'checkbox' ? checked : value,
       };
 
-      // If changing state to "Đã checkin" and there's no checkin_time, set current time
       if (name === 'state' && value === 'Đã checkin' && !prevMember.checkin_time) {
         const currentTime = new Date().toLocaleString('sv-SE', {
           timeZone: 'Asia/Ho_Chi_Minh'
@@ -176,9 +188,10 @@ const Management = ({ members, setMembers }) => {
         updatedMember.checkin_time = currentTime;
       }
       
-      // If changing state to "Chưa checkin", clear checkin_time
       if (name === 'state' && value === 'Chưa checkin') {
         updatedMember.checkin_time = '';
+        updatedMember.checkin_ceremony = false;
+        updatedMember.checkin_party = false;
       }
 
       return updatedMember;
@@ -187,37 +200,34 @@ const Management = ({ members, setMembers }) => {
 
   const handleCheckinClick = (member) => {
     setCheckinMember(member);
-    setLotteryNumber('');
+    // Determine default checkin type based on participation_type
+    if (member.participation_type === 'Phần lễ') {
+      setCheckinType('ceremony');
+    } else if (member.participation_type === 'Phần hội') {
+      setCheckinType('party');
+    } else {
+      setCheckinType('both');
+    }
     onCheckinOpen();
   };
 
   const handleCheckinConfirm = async () => {
-    if (!lotteryNumber.trim()) {
-      toast({
-        title: "Lottery number required",
-        description: "Please enter a lottery number",
-        status: "warning",
-        duration: 3000,
-        isClosable: true,
-      });
-      return;
-    }
-
     try {
       const response = await api.post('/api/checkin', {
         uid: checkinMember.MSSV || checkinMember.name,
-        lottery_number: parseInt(lotteryNumber.trim())
+        checkin_type: checkinType
       });
 
       if (response.data && response.data.member) {
-        // Update the member in the local state
         setMembers(members.map(m => 
           m.id === checkinMember.id ? response.data.member : m
         ));
         
+        const typeLabel = checkinType === 'ceremony' ? 'phần Lễ' : 
+                          checkinType === 'party' ? 'phần Hội' : 'cả hai phần';
         toast({
-          title: "Check-in successful",
-          description: `${checkinMember.name} has been checked in with lottery number ${lotteryNumber}`,
+          title: "Check-in thành công",
+          description: `${checkinMember.name} đã check-in ${typeLabel}`,
           status: "success",
           duration: 3000,
           isClosable: true,
@@ -227,9 +237,9 @@ const Management = ({ members, setMembers }) => {
       }
     } catch (error) {
       console.error('Check-in error:', error);
-      const errorMessage = error.response?.data?.message || 'Check-in failed';
+      const errorMessage = error.response?.data?.message || 'Check-in thất bại';
       toast({
-        title: "Check-in failed",
+        title: "Check-in thất bại",
         description: errorMessage,
         status: "error",
         duration: 3000,
@@ -253,106 +263,155 @@ const Management = ({ members, setMembers }) => {
     }
   };
 
+  const getMemberTypeBadge = (type) => {
+    if (type === 'CSV') {
+      return <Badge colorScheme="purple" fontSize="xs">CSV</Badge>;
+    }
+    return <Badge colorScheme="blue" fontSize="xs">SV</Badge>;
+  };
+
+  const getParticipationBadge = (type) => {
+    if (!type) return <Badge colorScheme="gray" fontSize="xs">-</Badge>;
+    if (type === 'Cả hai') return <Badge colorScheme="green" fontSize="xs">Cả hai</Badge>;
+    if (type === 'Phần lễ') return <Badge colorScheme="orange" fontSize="xs">Lễ</Badge>;
+    if (type === 'Phần hội') return <Badge colorScheme="pink" fontSize="xs">Hội</Badge>;
+    return <Badge colorScheme="gray" fontSize="xs">{type}</Badge>;
+  };
+
+  const headerBg = useColorModeValue("orange.50", "gray.900");
+  const tableBg = useColorModeValue("white", "gray.800");
+
   return (
     <Container maxW={'2000px'} my={4} display="flex" flexDirection="column" height="calc(100vh - 160px)" overflow="hidden" borderRadius="md">
+      {/* Search and Add Section */}
+      <Flex mb={4} gap={4} align="center" flexWrap="wrap">
+        <InputGroup maxW="400px">
+          <InputLeftElement pointerEvents="none">
+            <SearchIcon color="gray.400" />
+          </InputLeftElement>
+          <Input
+            placeholder="Tìm theo tên, MSSV, khóa..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            borderRadius="lg"
+            bg={tableBg}
+          />
+        </InputGroup>
+        <Button colorScheme="orange" onClick={() => openEditModal()} borderRadius="lg" leftIcon={<CheckIcon />}>
+          Thêm thành viên
+        </Button>
+        <Badge colorScheme="blue" fontSize="md" px={3} py={1} borderRadius="full">
+          Tổng: {filteredMembers.length} / {members.length}
+        </Badge>
+      </Flex>
 
-      <Box mb={4} borderRadius="md">
-        <Button colorScheme="teal" onClick={() => openEditModal()} borderRadius="md" mb={4}>Add Member</Button>
-      </Box>
-      <Box overflowY="auto" flex="1" borderRadius="md">
-        <Table variant="simple" borderRadius="md">
-          <Thead position="sticky" top={0} bg={useColorModeValue("gray.50", "gray.900")} zIndex={1} borderRadius="md">
+      {/* Table */}
+      <Box overflowY="auto" flex="1" borderRadius="xl" boxShadow="lg" bg={tableBg}>
+        <Table variant="simple" size="sm">
+          <Thead position="sticky" top={0} bg={headerBg} zIndex={1}>
             <Tr>
-              <Th onClick={() => requestSort('MSSV')} borderRadius="md">
+              <Th onClick={() => requestSort('name')} cursor="pointer" py={4}>
+                Tên {getSortIcon('name')}
+              </Th>
+              <Th onClick={() => requestSort('khoa')} cursor="pointer">
+                Khóa {getSortIcon('khoa')}
+              </Th>
+              <Th onClick={() => requestSort('MSSV')} cursor="pointer">
                 MSSV {getSortIcon('MSSV')}
               </Th>
-              <Th onClick={() => requestSort('name')} borderRadius="md">
-                Name {getSortIcon('name')}
+              <Th onClick={() => requestSort('member_type')} cursor="pointer">
+                Loại {getSortIcon('member_type')}
               </Th>
-              <Th onClick={() => requestSort('khoa')} borderRadius="md">
-                Khoa {getSortIcon('khoa')}
+              <Th onClick={() => requestSort('participation_type')} cursor="pointer">
+                Phần tham gia {getSortIcon('participation_type')}
               </Th>
-              <Th onClick={() => requestSort('organization')} borderRadius="md">
-                Organization {getSortIcon('organization')}
+              <Th textAlign="center">Check-in Lễ</Th>
+              <Th textAlign="center">Check-in Hội</Th>
+              <Th onClick={() => requestSort('state')} cursor="pointer">
+                Trạng thái {getSortIcon('state')}
               </Th>
-              <Th onClick={() => requestSort('join_year')} borderRadius="md">
-                Join Year {getSortIcon('join_year')}
+              <Th onClick={() => requestSort('checkin_time')} cursor="pointer">
+                Thời gian {getSortIcon('checkin_time')}
               </Th>
-              <Th onClick={() => requestSort('former_role')} borderRadius="md">
-                Former Role {getSortIcon('former_role')}
-              </Th>
-              <Th onClick={() => requestSort('lottery_number')} borderRadius="md">
-                Lottery Number {getSortIcon('lottery_number')}
-              </Th>
-              <Th onClick={() => requestSort('state')} borderRadius="md">
-                Status {getSortIcon('state')}
-              </Th>
-              <Th onClick={() => requestSort('checkin_time')} borderRadius="md">
-                Check-in Time {getSortIcon('checkin_time')}
-              </Th>
-              <Th borderRadius="md">Action</Th>
+              <Th>Thao tác</Th>
             </Tr>
           </Thead>
-          <Tbody borderRadius="md">
+          <Tbody>
             {displayedMembers.map((member) => (
-              <Tr key={member.id} borderRadius="md">
-                <Td borderRadius="md">{member.MSSV}</Td>
-                <Td minWidth="200px" borderRadius="md">{member.name}</Td>
-                <Td borderRadius="md">{member.khoa}</Td>
-                <Td borderRadius="md">{member.organization}</Td>
-                <Td borderRadius="md">{member.join_year}</Td>
-                <Td borderRadius="md">{member.former_role}</Td>
-                <Td borderRadius="md">{member.lottery_number || 'N/A'}</Td>
-                <Td borderRadius="md">
-                  {member.state && (
-                    <Text
-                      color={member.state === 'Đã checkin' ? 'green.500' : 'red.500'}
-                      fontWeight="bold"
-                    >
-                      {member.state}
-                    </Text>
+              <Tr key={member.id} _hover={{ bg: useColorModeValue('orange.50', 'gray.700') }}>
+                <Td fontWeight="medium" minW="180px">{member.name}</Td>
+                <Td>
+                  <Badge colorScheme="teal" variant="subtle">{member.khoa || '-'}</Badge>
+                </Td>
+                <Td>{member.MSSV || '-'}</Td>
+                <Td>{getMemberTypeBadge(member.member_type)}</Td>
+                <Td>{getParticipationBadge(member.participation_type)}</Td>
+                <Td textAlign="center">
+                  {member.checkin_ceremony ? (
+                    <Badge colorScheme="green" variant="solid">✓</Badge>
+                  ) : (
+                    <Badge colorScheme="gray" variant="outline">-</Badge>
                   )}
                 </Td>
-                <Td borderRadius="md">
+                <Td textAlign="center">
+                  {member.checkin_party ? (
+                    <Badge colorScheme="green" variant="solid">✓</Badge>
+                  ) : (
+                    <Badge colorScheme="gray" variant="outline">-</Badge>
+                  )}
+                </Td>
+                <Td>
+                  <Text
+                    color={member.state === 'Đã checkin' ? 'green.500' : 'orange.500'}
+                    fontWeight="bold"
+                    fontSize="sm"
+                  >
+                    {member.state || 'Chưa checkin'}
+                  </Text>
+                </Td>
+                <Td fontSize="xs">
                   {member.checkin_time ? 
                     new Date(member.checkin_time).toLocaleString('vi-VN', {
                       timeZone: 'Asia/Ho_Chi_Minh',
-                      year: 'numeric',
-                      month: '2-digit',
                       day: '2-digit',
+                      month: '2-digit',
                       hour: '2-digit',
                       minute: '2-digit',
-                      second: '2-digit',
                       hour12: false
-                    }) : 'N/A'
+                    }) : '-'
                   }
                 </Td>
-                <Td borderRadius="md">
-                  <IconButton
-                    icon={<EditIcon />}
-                    onClick={() => openEditModal(member)}
-                    mr={2}
-                    borderRadius="md"
-                    size="sm"
-                  />
-                  <IconButton
-                    icon={<DeleteIcon />}
-                    onClick={() => handleDeleteClick(member)}
-                    mr={2}
-                    borderRadius="md"
-                    size="sm"
-                  />
-                  {/* Check-in button - only show if not checked in */}
-                  {member.state !== 'Đã checkin' && (
-                    <Button
-                      size="sm"
-                      colorScheme="blue"
-                      onClick={() => handleCheckinClick(member)}
-                      borderRadius="md"
-                    >
-                      Check-in
-                    </Button>
-                  )}
+                <Td>
+                  <HStack spacing={1}>
+                    <Tooltip label="Sửa">
+                      <IconButton
+                        icon={<EditIcon />}
+                        onClick={() => openEditModal(member)}
+                        size="sm"
+                        colorScheme="blue"
+                        variant="ghost"
+                      />
+                    </Tooltip>
+                    <Tooltip label="Xóa">
+                      <IconButton
+                        icon={<DeleteIcon />}
+                        onClick={() => handleDeleteClick(member)}
+                        size="sm"
+                        colorScheme="red"
+                        variant="ghost"
+                      />
+                    </Tooltip>
+                    {!(member.checkin_ceremony && member.checkin_party) && (
+                      <Button
+                        size="sm"
+                        colorScheme="orange"
+                        onClick={() => handleCheckinClick(member)}
+                        fontSize="xs"
+                      >
+                        Check-in
+                      </Button>
+                    )}
+                  </HStack>
                 </Td>
               </Tr>
             ))}
@@ -360,90 +419,87 @@ const Management = ({ members, setMembers }) => {
         </Table>
       </Box>
 
-      <Modal isOpen={isEditOpen} onClose={handleModalClose} borderRadius="md">
+      {/* Edit/Add Modal */}
+      <Modal isOpen={isEditOpen} onClose={handleModalClose} size="lg">
         <ModalOverlay />
-        <ModalContent borderRadius="md">
-          <ModalHeader borderRadius="md">{selectedMember?.id ? 'Edit Member' : 'Add Member'}</ModalHeader>
-          <ModalCloseButton borderRadius="md" />
-          <ModalBody borderRadius="md">
+        <ModalContent borderRadius="xl">
+          <ModalHeader bg="orange.50" borderTopRadius="xl">
+            {selectedMember?.id ? 'Sửa thành viên' : 'Thêm thành viên mới'}
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody py={6}>
             <VStack spacing={4} align="stretch">
-              <FormControl>
-                <FormLabel>Tên</FormLabel>
+              <FormControl isRequired>
+                <FormLabel>Họ và tên</FormLabel>
                 <Input
-                  placeholder="Name"
+                  placeholder="Nhập họ và tên"
                   name="name"
                   value={selectedMember?.name || ''}
                   onChange={handleInputChange}
-                  borderRadius="md"
                 />
               </FormControl>
 
-              <FormControl>
-                <FormLabel>MSSV</FormLabel>
-                <Input
-                  placeholder="MSSV"
-                  name="MSSV"
-                  value={selectedMember?.MSSV || ''}
-                  onChange={handleInputChange}
-                  borderRadius="md"
-                />
-              </FormControl>
+              <HStack spacing={4}>
+                <FormControl>
+                  <FormLabel>Khóa</FormLabel>
+                  <Select
+                    name="khoa"
+                    value={selectedMember?.khoa || ''}
+                    onChange={handleInputChange}
+                    placeholder="Chọn khóa"
+                  >
+                    <option value="K61">K61</option>
+                    <option value="K62">K62</option>
+                    <option value="K63">K63</option>
+                    <option value="K64">K64</option>
+                    <option value="K65">K65</option>
+                    <option value="K66">K66</option>
+                    <option value="K67">K67</option>
+                    <option value="K68">K68</option>
+                    <option value="K69">K69</option>
+                    <option value="K70">K70</option>
+                    <option value="NCS">NCS</option>
+                  </Select>
+                </FormControl>
 
-              <FormControl>
-                <FormLabel>Khoa</FormLabel>
-                <Input
-                  placeholder="Khoa"
-                  name="khoa"
-                  value={selectedMember?.khoa || ''}
-                  onChange={handleInputChange}
-                  borderRadius="md"
-                />
-              </FormControl>
+                <FormControl>
+                  <FormLabel>MSSV</FormLabel>
+                  <Input
+                    placeholder="Nhập MSSV"
+                    name="MSSV"
+                    value={selectedMember?.MSSV || ''}
+                    onChange={handleInputChange}
+                  />
+                </FormControl>
+              </HStack>
 
-              <FormControl>
-                <FormLabel>Tổ chức</FormLabel>
-                <Input
-                  placeholder="Organization"
-                  name="organization"
-                  value={selectedMember?.organization || ''}
-                  onChange={handleInputChange}
-                  borderRadius="md"
-                />
-              </FormControl>
+              <HStack spacing={4}>
+                <FormControl>
+                  <FormLabel>Loại thành viên</FormLabel>
+                  <Select
+                    name="member_type"
+                    value={selectedMember?.member_type || 'CURRENT'}
+                    onChange={handleInputChange}
+                  >
+                    <option value="CSV">Cựu sinh viên (CSV)</option>
+                    <option value="CURRENT">Sinh viên hiện tại</option>
+                  </Select>
+                </FormControl>
 
-              <FormControl>
-                <FormLabel>Năm tham gia</FormLabel>
-                <Input
-                  placeholder="Join Year"
-                  name="join_year"
-                  value={selectedMember?.join_year || ''}
-                  onChange={handleInputChange}
-                  borderRadius="md"
-                />
-              </FormControl>
-
-              <FormControl>
-                <FormLabel>Vai trò cũ</FormLabel>
-                <Input
-                  placeholder="Former Role"
-                  name="former_role"
-                  value={selectedMember?.former_role || ''}
-                  onChange={handleInputChange}
-                  borderRadius="md"
-                />
-              </FormControl>
-
-              <FormControl>
-                <FormLabel>Số bốc thăm</FormLabel>
-                <Input
-                  placeholder="Lottery Number"
-                  name="lottery_number"
-                  type="number"
-                  value={selectedMember?.lottery_number || ''}
-                  onChange={handleInputChange}
-                  borderRadius="md"
-                />
-              </FormControl>
+                <FormControl>
+                  <FormLabel>Phần tham gia</FormLabel>
+                  <Select
+                    name="participation_type"
+                    value={selectedMember?.participation_type || ''}
+                    onChange={handleInputChange}
+                    placeholder="Chọn phần tham gia"
+                  >
+                    <option value="Cả hai">Cả hai (Lễ + Hội)</option>
+                    <option value="Phần lễ">Phần lễ</option>
+                    <option value="Phần hội">Phần hội</option>
+                  </Select>
+                </FormControl>
+              </HStack>
 
               <FormControl>
                 <FormLabel>Trạng thái check-in</FormLabel>
@@ -451,7 +507,6 @@ const Management = ({ members, setMembers }) => {
                   name="state"
                   value={selectedMember?.state || 'Chưa checkin'}
                   onChange={handleInputChange}
-                  borderRadius="md"
                 >
                   <option value="Chưa checkin">Chưa checkin</option>
                   <option value="Đã checkin">Đã checkin</option>
@@ -465,48 +520,44 @@ const Management = ({ members, setMembers }) => {
                     <Badge ml={2} colorScheme="blue" fontSize="xs">GMT+7</Badge>
                   </FormLabel>
                   <Input
-                    placeholder="Check-in Time"
                     name="checkin_time"
                     type="datetime-local"
                     value={selectedMember?.checkin_time || ''}
                     onChange={handleInputChange}
-                    borderRadius="md"
                   />
                 </FormControl>
               )}
             </VStack>
           </ModalBody>
-          <ModalFooter borderRadius="md">
-            <Button colorScheme="blue" mr={3} onClick={handleModalSave} borderRadius="md">
-              Save
+          <ModalFooter>
+            <Button colorScheme="orange" mr={3} onClick={handleModalSave}>
+              Lưu
             </Button>
-            <Button variant="ghost" onClick={handleModalClose} borderRadius="md">Cancel</Button>
+            <Button variant="ghost" onClick={handleModalClose}>Hủy</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
 
+      {/* Delete Confirmation */}
       <AlertDialog
         isOpen={isDeleteOpen}
         leastDestructiveRef={cancelRef}
         onClose={onDeleteClose}
-        borderRadius="md"
       >
-        <AlertDialogOverlay borderRadius="md">
-          <AlertDialogContent borderRadius="md">
-            <AlertDialogHeader fontSize="lg" fontWeight="bold" borderRadius="md">
-              Delete Member
+        <AlertDialogOverlay>
+          <AlertDialogContent borderRadius="xl">
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+              Xóa thành viên
             </AlertDialogHeader>
-
-            <AlertDialogBody borderRadius="md">
-              Are you sure you want to delete {selectedMember?.name}? This action cannot be undone.
+            <AlertDialogBody>
+              Bạn có chắc muốn xóa <strong>{selectedMember?.name}</strong>? Hành động này không thể hoàn tác.
             </AlertDialogBody>
-
-            <AlertDialogFooter borderRadius="md">
-              <Button ref={cancelRef} onClick={onDeleteClose} borderRadius="md">
-                Cancel
+            <AlertDialogFooter>
+              <Button ref={cancelRef} onClick={onDeleteClose}>
+                Hủy
               </Button>
-              <Button colorScheme="red" onClick={handleDeleteConfirm} ml={3} borderRadius="md">
-                Delete
+              <Button colorScheme="red" onClick={handleDeleteConfirm} ml={3}>
+                Xóa
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -514,28 +565,49 @@ const Management = ({ members, setMembers }) => {
       </AlertDialog>
 
       {/* Check-in Modal */}
-      <Modal isOpen={isCheckinOpen} onClose={onCheckinClose} borderRadius="md">
+      <Modal isOpen={isCheckinOpen} onClose={onCheckinClose}>
         <ModalOverlay />
-        <ModalContent borderRadius="md">
-          <ModalHeader borderRadius="md">Check-in {checkinMember?.name}</ModalHeader>
-          <ModalCloseButton borderRadius="md" />
-          <ModalBody borderRadius="md">
-            <Text mb={4}>
-              Checking in: <strong>{checkinMember?.name}</strong> (MSSV: {checkinMember?.MSSV})
-            </Text>
-            <Input
-              placeholder="Enter lottery number"
-              type="number"
-              value={lotteryNumber}
-              onChange={(e) => setLotteryNumber(e.target.value)}
-              borderRadius="md"
-            />
+        <ModalContent borderRadius="xl">
+          <ModalHeader bg="orange.50" borderTopRadius="xl">
+            Check-in: {checkinMember?.name}
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody py={6}>
+            <VStack spacing={4} align="stretch">
+              <Box p={4} bg="gray.50" borderRadius="lg">
+                <Text fontSize="sm" color="gray.600">
+                  <strong>Tên:</strong> {checkinMember?.name}
+                </Text>
+                <Text fontSize="sm" color="gray.600">
+                  <strong>Khóa:</strong> {checkinMember?.khoa || 'N/A'}
+                </Text>
+                <Text fontSize="sm" color="gray.600">
+                  <strong>MSSV:</strong> {checkinMember?.MSSV || 'N/A'}
+                </Text>
+                <Text fontSize="sm" color="gray.600">
+                  <strong>Phần đăng ký:</strong> {checkinMember?.participation_type || 'Không xác định'}
+                </Text>
+              </Box>
+
+              <FormControl>
+                <FormLabel>Loại check-in</FormLabel>
+                <Select
+                  value={checkinType}
+                  onChange={(e) => setCheckinType(e.target.value)}
+                >
+                  <option value="both">Cả hai (Lễ + Hội)</option>
+                  <option value="ceremony">Chỉ phần Lễ</option>
+                  <option value="party">Chỉ phần Hội</option>
+                </Select>
+              </FormControl>
+
+            </VStack>
           </ModalBody>
-          <ModalFooter borderRadius="md">
-            <Button colorScheme="blue" mr={3} onClick={handleCheckinConfirm} borderRadius="md">
-              Check-in
+          <ModalFooter>
+            <Button colorScheme="orange" mr={3} onClick={handleCheckinConfirm} size="lg">
+              ✓ Check-in
             </Button>
-            <Button variant="ghost" onClick={onCheckinClose} borderRadius="md">Cancel</Button>
+            <Button variant="ghost" onClick={onCheckinClose}>Hủy</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

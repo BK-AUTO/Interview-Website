@@ -40,7 +40,7 @@ import api from '../api/axios';
 const Checkin = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [uid, setUid] = useState('');
-  const [lotteryNumber, setLotteryNumber] = useState('');
+  const [checkinType, setCheckinType] = useState('both');
   const [loading, setLoading] = useState(false);
   const [members, setMembers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -86,8 +86,7 @@ const Checkin = () => {
       const filtered = members.filter(member =>
         member.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         member.MSSV?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        member.organization?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        member.former_role?.toLowerCase().includes(searchTerm.toLowerCase())
+        member.khoa?.toLowerCase().includes(searchTerm.toLowerCase())
       );
       setFilteredMembers(filtered);
     }
@@ -95,24 +94,21 @@ const Checkin = () => {
 
   const handleMemberSelect = (member) => {
     setUid(member.MSSV || member.name);
+    // Set default checkin type based on participation
+    if (member.participation_type === 'Phần lễ') {
+      setCheckinType('ceremony');
+    } else if (member.participation_type === 'Phần hội') {
+      setCheckinType('party');
+    } else {
+      setCheckinType('both');
+    }
   };
 
   const handleCheckin = async () => {
     if (!uid.trim()) {
       toast({
-        title: "ID is required",
-        description: "Please enter your MSSV or Name before checking in",
-        status: "warning",
-        duration: 3000,
-        isClosable: true,
-      });
-      return;
-    }
-
-    if (!lotteryNumber.trim()) {
-      toast({
-        title: "Lottery number is required",
-        description: "Please enter your lottery number before checking in",
+        title: "Yêu cầu thông tin",
+        description: "Vui lòng nhập MSSV hoặc Tên",
         status: "warning",
         duration: 3000,
         isClosable: true,
@@ -124,11 +120,11 @@ const Checkin = () => {
     try {
       const response = await api.post('/api/checkin', { 
         uid: uid.trim(), 
-        lottery_number: parseInt(lotteryNumber.trim()) 
+        checkin_type: checkinType
       });
       
       if (response.data && response.data.member) {
-        const { name, khoa, organization, join_year, former_role, lottery_number, checkin_time } = response.data.member;
+        const { name, khoa, checkin_time } = response.data.member;
         
         // Format the date for display with Vietnam timezone
         let formattedTime = checkin_time || new Date().toLocaleString('vi-VN', {
@@ -140,12 +136,10 @@ const Checkin = () => {
             if (!isNaN(date.getTime())) {
               formattedTime = date.toLocaleString('vi-VN', {
                 timeZone: 'Asia/Ho_Chi_Minh',
-                year: 'numeric',
-                month: '2-digit',
                 day: '2-digit',
+                month: '2-digit',
                 hour: '2-digit',
                 minute: '2-digit',
-                second: '2-digit',
                 hour12: false
               });
             }
@@ -154,15 +148,18 @@ const Checkin = () => {
           console.error('Error formatting date:', e);
         }
         
+        const typeLabel = checkinType === 'ceremony' ? 'phần Lễ' : 
+                          checkinType === 'party' ? 'phần Hội' : 'cả hai phần';
+        
         toast({
           title: `${name} check-in thành công`,
-          description: `Thành viên ${name} từ ${organization || khoa || 'chưa xác định'} đã check-in vào lúc ${formattedTime} với số bốc thăm ${lottery_number}`,
+          description: `Thành viên ${name} (${khoa || 'N/A'}) đã check-in ${typeLabel} lúc ${formattedTime}`,
           status: "success",
           duration: 5000,
           isClosable: true,
         });
         setUid('');
-        setLotteryNumber('');
+        setCheckinType('both');
         onClose();
       }
     } catch (error) {
@@ -191,7 +188,7 @@ const Checkin = () => {
       <Modal isOpen={isOpen} onClose={onClose} size="6xl">
         <ModalOverlay />
         <ModalContent maxH="90vh">
-          <ModalHeader>Check-in Page</ModalHeader>
+          <ModalHeader bg="orange.50">🎉 YEP 2025 - Check-in</ModalHeader>
           <ModalCloseButton />
           <ModalBody overflowY="auto">
             <VStack spacing={6} align="stretch">
@@ -202,12 +199,13 @@ const Checkin = () => {
                 </Text>
                 <InputGroup>
                   <InputLeftElement pointerEvents="none">
-                    <SearchIcon color="gray.300" />
+                    <SearchIcon color="orange.400" />
                   </InputLeftElement>
                   <Input
-                    placeholder="Tìm theo tên, MSSV, tổ chức hoặc vai trò..."
+                    placeholder="Tìm theo tên, MSSV, khóa..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
+                    focusBorderColor="orange.400"
                   />
                 </InputGroup>
               </Box>
@@ -241,24 +239,37 @@ const Checkin = () => {
                       <Thead position="sticky" top={0} bg={bgColor} zIndex={1}>
                         <Tr>
                           <Th>Tên</Th>
+                          <Th>Khóa</Th>
                           <Th>MSSV</Th>
-                          <Th>Tổ chức</Th>
-                          <Th>Vai trò cũ</Th>
+                          <Th>Phần tham gia</Th>
                           <Th>Trạng thái</Th>
                           <Th>Chọn</Th>
                         </Tr>
                       </Thead>
                       <Tbody>
                         {filteredMembers.map((member) => (
-                          <Tr key={member.id} _hover={{ bg: 'gray.50' }}>
+                          <Tr key={member.id} _hover={{ bg: 'orange.50' }}>
                             <Td fontWeight="medium">{member.name}</Td>
-                            <Td>{member.MSSV}</Td>
-                            <Td>{member.organization || 'N/A'}</Td>
-                            <Td>{member.former_role || 'N/A'}</Td>
+                            <Td>
+                              <Badge colorScheme="teal" variant="subtle">
+                                {member.khoa || 'N/A'}
+                              </Badge>
+                            </Td>
+                            <Td>{member.MSSV || '-'}</Td>
+                            <Td>
+                              <Badge 
+                                colorScheme={member.participation_type === 'Cả hai' ? 'green' : 
+                                            member.participation_type === 'Phần lễ' ? 'orange' : 
+                                            member.participation_type === 'Phần hội' ? 'pink' : 'gray'}
+                                variant="subtle"
+                              >
+                                {member.participation_type || '-'}
+                              </Badge>
+                            </Td>
                             <Td>
                               <Badge 
                                 colorScheme={member.state === 'Đã checkin' ? 'green' : 'orange'}
-                                variant="subtle"
+                                variant="solid"
                               >
                                 {member.state || 'Chưa checkin'}
                               </Badge>
@@ -266,10 +277,10 @@ const Checkin = () => {
                             <Td>
                               <Button
                                 size="sm"
-                                colorScheme="blue"
+                                colorScheme="orange"
                                 variant="outline"
                                 onClick={() => handleMemberSelect(member)}
-                                isDisabled={member.state === 'Đã checkin'}
+                                isDisabled={member.checkin_ceremony && member.checkin_party}
                               >
                                 Chọn
                               </Button>
@@ -302,19 +313,39 @@ const Checkin = () => {
                   <FormControl>
                     <FormLabel>MSSV hoặc Tên</FormLabel>
                     <Input 
-                      placeholder='Nhập MSSV hoặc tên đầy đủ của bạn'
+                      placeholder='Nhập MSSV hoặc tên đầy đủ'
                       value={uid}
                       onChange={(e) => setUid(e.target.value)}
                     />
                   </FormControl>
                   <FormControl>
-                    <FormLabel>Số bốc thăm</FormLabel>
-                    <Input 
-                      placeholder='Nhập số bốc thăm của bạn'
-                      type="number"
-                      value={lotteryNumber}
-                      onChange={(e) => setLotteryNumber(e.target.value)}
-                    />
+                    <FormLabel>Loại check-in</FormLabel>
+                    <HStack spacing={4}>
+                      <Button
+                        size="sm"
+                        colorScheme={checkinType === 'both' ? 'green' : 'gray'}
+                        variant={checkinType === 'both' ? 'solid' : 'outline'}
+                        onClick={() => setCheckinType('both')}
+                      >
+                        Cả hai
+                      </Button>
+                      <Button
+                        size="sm"
+                        colorScheme={checkinType === 'ceremony' ? 'orange' : 'gray'}
+                        variant={checkinType === 'ceremony' ? 'solid' : 'outline'}
+                        onClick={() => setCheckinType('ceremony')}
+                      >
+                        📜 Phần Lễ
+                      </Button>
+                      <Button
+                        size="sm"
+                        colorScheme={checkinType === 'party' ? 'pink' : 'gray'}
+                        variant={checkinType === 'party' ? 'solid' : 'outline'}
+                        onClick={() => setCheckinType('party')}
+                      >
+                        🎉 Phần Hội
+                      </Button>
+                    </HStack>
                   </FormControl>
                 </Flex>
               </Box>
@@ -322,15 +353,16 @@ const Checkin = () => {
           </ModalBody>
           <ModalFooter>
             <Button 
-              colorScheme="blue" 
+              colorScheme="orange" 
               mr={3} 
               onClick={handleCheckin} 
               isLoading={loading}
-              loadingText="Checking in..."
+              loadingText="Đang check-in..."
+              size="lg"
             >
-              Check-in
+              ✓ Check-in
             </Button>
-            <Button variant="ghost" onClick={onClose} isDisabled={loading}>Cancel</Button>
+            <Button variant="ghost" onClick={onClose} isDisabled={loading}>Hủy</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
