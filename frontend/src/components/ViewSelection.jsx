@@ -237,9 +237,6 @@ const ViewSelection = ({ onSelectView }) => {
           >
             🎉 BK-AUTO YEP 2025 - Year End Party 🎉
           </Text>
-          <Text fontSize="sm" color={useColorModeValue('gray.500', 'gray.500')} mt={2}>
-            CLB Ô tô Bách Khoa - Cùng nhau vững bước tương lai
-          </Text>
         </Box>
       </Container>
     </Box>
