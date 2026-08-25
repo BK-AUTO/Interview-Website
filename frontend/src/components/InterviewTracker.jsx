@@ -1,103 +1,204 @@
 import React, { useMemo } from 'react';
 import {
-  Container,
-  Text,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
   Box,
-  Badge,
+  Flex,
   Heading,
-  useColorModeValue
+  Text,
+  Badge,
+  HStack,
+  VStack,
+  SimpleGrid,
+  Divider,
 } from '@chakra-ui/react';
+import { FaChartBar, FaBullhorn, FaMicrophoneAlt } from 'react-icons/fa';
 
-// Update to include both Gọi PV and Đang phỏng vấn states
-const InterviewTracker = ({ members }) => {
-  const tableHeaderBg = useColorModeValue("gray.50", "gray.900");
-  const borderColor = useColorModeValue("gray.200", "gray.700");
-
-  // Extract members who are in the interview process
-  const interviewingMembers = useMemo(() => {
-    return members.filter(member => 
-      member.state === 'Đang phỏng vấn' || member.state === 'Gọi PV'
+const InterviewTracker = ({ members = [] }) => {
+  // Extract members in active interview flow ('Đang phỏng vấn' or 'Gọi PV')
+  const activeInterviewees = useMemo(() => {
+    return members.filter(
+      (m) => m.state === 'Đang phỏng vấn' || m.state === 'Gọi PV'
     );
   }, [members]);
 
-  // Group members by speciality
-  const groupedBySpeciality = useMemo(() => {
-    const groups = {};
-    interviewingMembers.forEach(member => {
-      const speciality = member.specialist || 'Unknown';
-      if (!groups[speciality]) {
-        groups[speciality] = [];
-      }
-      groups[speciality].push(member);
+  const inInterviewCount = useMemo(
+    () => activeInterviewees.filter((m) => m.state === 'Đang phỏng vấn').length,
+    [activeInterviewees]
+  );
+
+  const callingCount = useMemo(
+    () => activeInterviewees.filter((m) => m.state === 'Gọi PV').length,
+    [activeInterviewees]
+  );
+
+  // Group active interviewees by specialist/department
+  const groupedBySpecialist = useMemo(() => {
+    const map = {};
+    activeInterviewees.forEach((member) => {
+      const spec = member.specialist || 'Chung / Chưa phân mảng';
+      if (!map[spec]) map[spec] = [];
+      map[spec].push(member);
     });
-    return groups;
-  }, [interviewingMembers]);
+    return map;
+  }, [activeInterviewees]);
 
   return (
-    <Container maxW={'2000px'} my={4} display="flex" flexDirection="column" height="calc(100vh - 160px)" overflow="hidden">
-      <Heading
-        fontSize={{ base: '2xl', md: '3xl' }}
-        fontWeight={'bold'}
-        textAlign={'center'}
-        mb={8}
-        bgGradient={'linear(to-r, pink.400, purple.500)'}
-        bgClip={'text'}
-      >
-        Bảng Theo Dõi Phỏng Vấn
-      </Heading>
+    <Box pb={8}>
+      {/* Page Title & Live Badge */}
+      <Flex justify="space-between" align={{ base: 'flex-start', sm: 'center' }} mb={6} flexWrap="wrap" gap={3}>
+        <HStack spacing={3}>
+          <Box p={2} borderRadius="lg" bg="rgba(114, 46, 209, 0.15)" color="secondary.500">
+            <FaChartBar size={20} />
+          </Box>
+          <Box>
+            <Heading fontSize={{ base: 'xl', md: '2xl' }} fontWeight="bold" color="white">
+              Bảng theo dõi phỏng vấn trực tiếp
+            </Heading>
+            <Text fontSize="xs" color="whiteAlpha.600">
+              Cập nhật thời gian thực các phòng phỏng vấn và ứng viên đang trong lượt
+            </Text>
+          </Box>
+        </HStack>
 
-      {interviewingMembers.length === 0 ? (
-        <Box 
-          textAlign="center" 
-          py={10}
-          borderWidth="1px"
-          borderRadius="lg"
-          borderColor={borderColor}
-        >
-          <Text fontSize="xl">Không có phỏng vấn nào đang diễn ra</Text>
+        <HStack spacing={2} p={2} px={3} borderRadius="full" bg="dark.800" borderWidth="1px" borderColor="dark.border">
+          <Box w="8px" h="8px" borderRadius="full" bg="primary.500" className="live-pulse" />
+          <Text fontSize="xs" fontWeight="bold" color="primary.500" textTransform="uppercase" letterSpacing="0.05em">
+            Live Updates
+          </Text>
+        </HStack>
+      </Flex>
+
+      {/* KPI Stat Cards */}
+      <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4} mb={6}>
+        <Box p={4} borderRadius="xl" bg="dark.800" borderWidth="1px" borderColor="dark.border">
+          <Flex justify="space-between" align="center">
+            <Box>
+              <Text fontSize="xs" fontWeight="semibold" color="whiteAlpha.600" textTransform="uppercase" letterSpacing="0.05em">
+                Đang trong phòng phỏng vấn
+              </Text>
+              <Text fontSize="2xl" fontWeight="bold" color="secondary.500" mt={1}>
+                {inInterviewCount} ứng viên
+              </Text>
+            </Box>
+            <Box p={3} borderRadius="xl" bg="rgba(114, 46, 209, 0.15)" color="secondary.500">
+              <FaMicrophoneAlt size={20} />
+            </Box>
+          </Flex>
+        </Box>
+
+        <Box p={4} borderRadius="xl" bg="dark.800" borderWidth="1px" borderColor="dark.border">
+          <Flex justify="space-between" align="center">
+            <Box>
+              <Text fontSize="xs" fontWeight="semibold" color="whiteAlpha.600" textTransform="uppercase" letterSpacing="0.05em">
+                Đang được gọi vào phòng
+              </Text>
+              <Text fontSize="2xl" fontWeight="bold" color="warning.500" mt={1}>
+                {callingCount} ứng viên
+              </Text>
+            </Box>
+            <Box p={3} borderRadius="xl" bg="rgba(250, 173, 20, 0.15)" color="warning.500">
+              <FaBullhorn size={20} />
+            </Box>
+          </Flex>
+        </Box>
+      </SimpleGrid>
+
+      {/* Active Interviews by Department */}
+      {activeInterviewees.length === 0 ? (
+        <Box textAlign="center" py={16} bg="dark.800" borderWidth="1px" borderColor="dark.border" borderRadius="xl">
+          <Box as={FaChartBar} boxSize={12} color="whiteAlpha.300" mx="auto" mb={3} />
+          <Text fontSize="md" fontWeight="medium" color="whiteAlpha.700">
+            Hiện tại không có lượt phỏng vấn nào đang diễn ra
+          </Text>
+          <Text fontSize="xs" color="whiteAlpha.400" mt={1}>
+            Khi admin bấm &ldquo;Gọi PV&rdquo; từ tab Quản lý ứng viên, danh sách sẽ hiển thị tự động tại đây
+          </Text>
         </Box>
       ) : (
-        <Box overflowY="auto" flex="1" borderWidth="1px" borderRadius="lg" borderColor={borderColor}>
-          <Table variant="simple">
-            <Thead position="sticky" top={0} bg={tableHeaderBg} zIndex={1}>
-              <Tr>
-                <Th>Speciality</Th>
-                <Th>Status</Th>
-                <Th>Member Name</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {Object.entries(groupedBySpeciality).map(([speciality, members]) => (
-                members.map((member, idx) => (
-                  <Tr key={member.id}>
-                    {idx === 0 ? (
-                      <Td rowSpan={members.length} verticalAlign="top">
-                        <Text fontWeight="bold">{speciality}</Text>
-                      </Td>
-                    ) : null}
-                    <Td>
-                      <Badge colorScheme={member.state === 'Gọi PV' ? 'blue' : 'red'}>
-                        {member.state}
-                      </Badge>
-                    </Td>
-                    <Td>
-                      <Text fontWeight="medium">{member.name}</Text>
-                      <Text fontSize="sm" color="gray.500">{member.MSSV}</Text>
-                    </Td>
-                  </Tr>
-                ))
-              ))}
-            </Tbody>
-          </Table>
-        </Box>
+        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4}>
+          {Object.entries(groupedBySpecialist).map(([dept, candidates]) => (
+            <Box
+              key={dept}
+              p={5}
+              borderRadius="xl"
+              bg="dark.800"
+              borderWidth="1px"
+              borderColor="dark.border"
+              display="flex"
+              flexDirection="column"
+            >
+              <Flex justify="space-between" align="center" mb={4}>
+                <Heading fontSize="sm" fontWeight="bold" color="white" textTransform="uppercase" letterSpacing="0.05em">
+                  {dept}
+                </Heading>
+                <Badge bg="dark.700" color="whiteAlpha.800" fontSize="11px" px={2} py={0.5} borderRadius="full">
+                  {candidates.length} người
+                </Badge>
+              </Flex>
+
+              <Divider borderColor="dark.border" mb={4} />
+
+              <VStack spacing={3} align="stretch" flex="1">
+                {candidates.map((candidate) => {
+                  const isInInterview = candidate.state === 'Đang phỏng vấn';
+
+                  return (
+                    <Box
+                      key={candidate.id}
+                      p={3.5}
+                      borderRadius="lg"
+                      bg={isInInterview ? 'rgba(114, 46, 209, 0.08)' : 'dark.750'}
+                      border="1px solid"
+                      borderColor={isInInterview ? 'rgba(114, 46, 209, 0.3)' : 'dark.border'}
+                      position="relative"
+                      overflow="hidden"
+                    >
+                      {isInInterview && (
+                        <Box
+                          position="absolute"
+                          top={0}
+                          left={0}
+                          bottom={0}
+                          w="3px"
+                          bg="secondary.500"
+                        />
+                      )}
+
+                      <Flex justify="space-between" align="flex-start">
+                        <Box pl={isInInterview ? 1.5 : 0}>
+                          <Text fontWeight="bold" color="white" fontSize="sm">
+                            {candidate.name}
+                          </Text>
+                          <Text fontSize="xs" color="primary.500" fontFamily="mono">
+                            {candidate.MSSV}
+                          </Text>
+                          {candidate.major_class && (
+                            <Text fontSize="11px" color="whiteAlpha.500" mt={0.5}>
+                              {candidate.major_class}
+                            </Text>
+                          )}
+                        </Box>
+
+                        <Badge
+                          bg={isInInterview ? 'rgba(114, 46, 209, 0.2)' : 'rgba(250, 173, 20, 0.2)'}
+                          color={isInInterview ? 'secondary.500' : 'warning.500'}
+                          border="1px solid"
+                          borderColor={isInInterview ? 'rgba(114, 46, 209, 0.4)' : 'rgba(250, 173, 20, 0.4)'}
+                          fontSize="xs"
+                          px={2}
+                          py={0.5}
+                        >
+                          {candidate.state}
+                        </Badge>
+                      </Flex>
+                    </Box>
+                  );
+                })}
+              </VStack>
+            </Box>
+          ))}
+        </SimpleGrid>
       )}
-    </Container>
+    </Box>
   );
 };
 
