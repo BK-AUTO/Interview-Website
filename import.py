@@ -7,7 +7,7 @@ import pandas as pd
 from datetime import datetime
 
 # Database path - đồng bộ với app.py
-db_file = 'backend/instance/memberlist251.db'
+db_file = 'backend/instance/new.db'
 def get_google_sheet_data(sheet_url):
     """
     Lấy dữ liệu từ Google Sheets public

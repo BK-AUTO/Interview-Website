@@ -25,6 +25,13 @@ dist-ssr
 .venv/*
 backend/venv/*
 backend/__pycache__/*
+.env
+backend/.env
+frontend/.env
+backend/uploads/*
+*.db
+backend/instance/*.db
+instance/*.db
 
 backend/__pycache__/app.cpython-312.pyc
 backend/__pycache__/app.cpython-39.pyc

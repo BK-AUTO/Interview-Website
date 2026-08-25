@@ -19,6 +19,9 @@ services:
       - "8091:8091"
     volumes:
       - ./instance:/app/instance
+      - ./backend/uploads:/app/uploads
+    env_file:
+      - ./backend/.env
     environment:
       - FLASK_ENV=production
       - FLASK_APP=wsgi.py
