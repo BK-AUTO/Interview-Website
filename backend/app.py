@@ -150,6 +150,68 @@ def member_to_dict(member):
         'confirmed_at': member.confirmed_at
     }
 
+class AuditLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    member_id = db.Column(db.Integer, db.ForeignKey('member.id', ondelete='CASCADE'), nullable=True, index=True)
+    actor_username = db.Column(db.String(100), nullable=True) # e.g. duc.na238345
+    actor_name = db.Column(db.String(100), nullable=True)     # e.g. Nguyễn Anh Đức
+    actor_email = db.Column(db.String(100), nullable=True)    # e.g. duc.na238345@sis.hust.edu.vn
+    actor_type = db.Column(db.String(50), default='admin')    # 'admin', 'candidate', 'system'
+    action = db.Column(db.String(100), nullable=False)        # e.g. 'Duyệt đậu vòng đơn', 'Đổi lịch phỏng vấn', 'Check-in'
+    details = db.Column(db.Text, nullable=True)               # e.g. 'Chuyển từ Chờ duyệt sang Đậu vòng đơn'
+    created_at = db.Column(db.String(100), nullable=False)   # formatted GMT+7 time
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'member_id': self.member_id,
+            'actor_username': self.actor_username,
+            'actor_name': self.actor_name,
+            'actor_email': self.actor_email,
+            'actor_type': self.actor_type,
+            'action': self.action,
+            'details': self.details,
+            'created_at': self.created_at
+        }
+
+def get_current_actor():
+    try:
+        claims = get_jwt()
+        if not claims:
+            return {'username': 'Admin', 'name': 'Ban Quản Trị', 'email': ''}
+        username = claims.get('username') or claims.get('name') or claims.get('email') or 'Admin'
+        display_name = claims.get('display_name') or claims.get('name') or username
+        email = claims.get('email') or ''
+        return {
+            'username': username,
+            'name': display_name,
+            'email': email
+        }
+    except Exception:
+        return {'username': 'Admin', 'name': 'Ban Quản Trị', 'email': ''}
+
+def record_audit_log(member_id, action, details=None, actor=None, actor_type='admin'):
+    try:
+        if actor is None and actor_type == 'admin':
+            actor = get_current_actor()
+        elif actor is None:
+            actor = {'username': 'Ứng viên', 'name': 'Ứng viên', 'email': ''}
+        
+        log = AuditLog(
+            member_id=member_id,
+            actor_username=actor.get('username'),
+            actor_name=actor.get('name'),
+            actor_email=actor.get('email'),
+            actor_type=actor_type,
+            action=action,
+            details=details,
+            created_at=format_gmt7_time()
+        )
+        db.session.add(log)
+        db.session.commit()
+    except Exception as e:
+        logging.error(f"Error recording audit log: {e}")
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -198,11 +260,31 @@ def auth_callback():
     try:
         token = oauth.authentik.authorize_access_token()
         userinfo = token.get('userinfo') or {}
+        
+        # Extract Authentik OIDC profile fields
+        preferred_username = userinfo.get('preferred_username') or userinfo.get('nickname') or userinfo.get('name') or userinfo.get('email')
+        display_name = userinfo.get('display_name') or userinfo.get('name') or preferred_username
+        name = userinfo.get('name') or display_name
+        email = userinfo.get('email') or ''
+        picture = userinfo.get('picture') or ''
+        mssv = userinfo.get('mssv') or ''
+        role_clb = userinfo.get('role_clb') or ''
+        groups = userinfo.get('groups') or []
+
         access_token = create_access_token(
             identity=userinfo.get('sub'),
-            additional_claims={'email': userinfo.get('email'), 'name': userinfo.get('name')},
+            additional_claims={
+                'username': preferred_username,
+                'display_name': display_name,
+                'name': name,
+                'email': email,
+                'picture': picture,
+                'mssv': mssv,
+                'role_clb': role_clb,
+                'groups': groups,
+            },
         )
-        logging.info(f"Authentik login: {userinfo.get('email') or userinfo.get('sub')}")
+        logging.info(f"Authentik login success: {preferred_username} ({email})")
         return redirect(f"{FRONTEND_URL}/?token={access_token}")
     except Exception as e:
         logging.error(f"Authentik callback error: {e}")
@@ -212,7 +294,17 @@ def auth_callback():
 @jwt_required()
 def auth_me():
     claims = get_jwt()
-    return jsonify({'sub': get_jwt_identity(), 'email': claims.get('email'), 'name': claims.get('name')})
+    return jsonify({
+        'sub': get_jwt_identity(),
+        'username': claims.get('username') or claims.get('name') or 'Admin',
+        'display_name': claims.get('display_name') or claims.get('name') or claims.get('username') or 'Admin',
+        'name': claims.get('name') or 'Admin',
+        'email': claims.get('email') or '',
+        'picture': claims.get('picture') or '',
+        'mssv': claims.get('mssv') or '',
+        'role_clb': claims.get('role_clb') or '',
+        'groups': claims.get('groups') or [],
+    })
 
 @app.route('/api/members', methods=['GET'])
 @jwt_required()
@@ -246,6 +338,15 @@ def add_member():
         )
         db.session.add(new_member)
         db.session.commit()
+        
+        # Record audit log
+        record_audit_log(
+            member_id=new_member.id,
+            action='Thêm ứng viên',
+            details=f"Thêm thủ công ứng viên {new_member.name} ({new_member.specialist or 'Chưa phân mảng'})",
+            actor_type='admin'
+        )
+
         member_data = member_to_dict(new_member)
         socketio.emit('member_added', member_data)
         logging.info(f"Member added: {new_member.name}")
@@ -293,6 +394,37 @@ def edit_member(id):
 
             db.session.commit()
 
+            # Record audit log based on state transition or data update
+            if member.state != previous_state:
+                if member.state == 'Đậu vòng đơn':
+                    action_name = 'Duyệt đậu vòng đơn'
+                    details_text = 'Duyệt hồ sơ đạt yêu cầu vòng đơn, sinh mã và link xác nhận'
+                elif member.state == 'Trượt vòng đơn':
+                    action_name = 'Duyệt trượt vòng đơn'
+                    details_text = 'Đánh giá hồ sơ không đạt vòng đơn'
+                elif member.state == 'Gọi PV':
+                    action_name = 'Gọi phỏng vấn'
+                    details_text = 'Mời ứng viên chuẩn bị vào phòng phỏng vấn'
+                elif member.state == 'Đang phỏng vấn':
+                    action_name = 'Bắt đầu phỏng vấn'
+                    details_text = 'Ứng viên bắt đầu lượt phỏng vấn trực tiếp'
+                elif member.state == 'Đã phỏng vấn':
+                    action_name = 'Hoàn thành phỏng vấn'
+                    details_text = 'Kết thúc lượt phỏng vấn của ứng viên'
+                else:
+                    action_name = 'Chuyển trạng thái'
+                    details_text = f"Chuyển trạng thái từ '{previous_state}' sang '{member.state}'"
+            else:
+                action_name = 'Cập nhật thông tin'
+                details_text = 'Chỉnh sửa thông tin chi tiết hồ sơ ứng viên'
+
+            record_audit_log(
+                member_id=member.id,
+                action=action_name,
+                details=details_text,
+                actor_type='admin'
+            )
+
             member_data = member_to_dict(member)
             response_payload = {'message': 'Member edited successfully', 'member': member_data}
             if new_plaintext_password:
@@ -306,13 +438,10 @@ def edit_member(id):
             elif member.state == 'Trượt vòng đơn' and previous_state != 'Trượt vòng đơn':
                 socketio.emit('member_screening_failed', member_data)
             elif member.state == 'Gọi PV' and previous_state != 'Gọi PV':
-                # logging.info(f"Emitting interview call event for: {member.name}")
                 socketio.emit('member_interview_called', member_data)
             elif member.state == 'Đang phỏng vấn' and previous_state != 'Đang phỏng vấn':
-                # logging.info(f"Emitting interview started event for: {member.name}")
                 socketio.emit('member_interview_started', member_data)
             elif member.state == 'Đã phỏng vấn' and previous_state != 'Đã phỏng vấn':
-                # logging.info(f"Emitting interview completed event for: {member.name}")
                 socketio.emit('member_interview_ended', member_data)
             elif member.state == 'Đã xác nhận' and previous_state != 'Đã xác nhận':
                 socketio.emit('member_confirmed', member_data)
@@ -345,6 +474,13 @@ def reset_confirmation(id):
         member.confirm_password_hash = generate_password_hash(new_plaintext_password)
         db.session.commit()
 
+        record_audit_log(
+            member_id=member.id,
+            action='Tạo lại mật khẩu xác nhận',
+            details='Admin tạo lại mã xác nhận và đường link mới (link cũ bị vô hiệu hoá)',
+            actor_type='admin'
+        )
+
         member_data = member_to_dict(member)
         logging.info(f"Confirmation reset for member: {member.name}")
         return jsonify({
@@ -362,6 +498,12 @@ def delete_member(id):
     try:
         member = Member.query.get(id)
         if member:
+            record_audit_log(
+                member_id=member.id,
+                action='Xoá ứng viên',
+                details=f"Xoá hồ sơ ứng viên {member.name} ({member.MSSV})",
+                actor_type='admin'
+            )
             db.session.delete(member)
             db.session.commit()
             socketio.emit('member_deleted', {'id': id})
@@ -371,6 +513,16 @@ def delete_member(id):
             return jsonify({'message': 'Member not found'}), 404
     except Exception as e:
         logging.error(f"Error deleting member: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/members/<int:id>/audit-logs', methods=['GET'])
+@jwt_required()
+def get_member_audit_logs(id):
+    try:
+        logs = AuditLog.query.filter_by(member_id=id).order_by(AuditLog.id.desc()).all()
+        return jsonify([log.to_dict() for log in logs])
+    except Exception as e:
+        logging.error(f"Error getting audit logs: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/checkin', methods=['POST'])
@@ -394,6 +546,14 @@ def checkin_member():
             member.checkin_time = current_time
             member.state = 'Đã checkin'
             db.session.commit()
+
+            record_audit_log(
+                member_id=member.id,
+                action='Check-in tại sự kiện',
+                details=f"Check-in thành công lúc {current_time}",
+                actor={'username': member.MSSV, 'name': member.name, 'email': member.email},
+                actor_type='candidate'
+            )
 
             member_data = member_to_dict(member)
             socketio.emit('member_checked_in', member_data)
@@ -420,9 +580,19 @@ def checkin_member_esp():
                 return jsonify({
                     'message': f"Không thể check-in: ứng viên đang ở trạng thái '{member.state}'"
                 }), 400
-            member.checkin_time = format_gmt7_time()
+            current_time = format_gmt7_time()
+            member.checkin_time = current_time
             member.state = 'Đã checkin'
             db.session.commit()
+
+            record_audit_log(
+                member_id=member.id,
+                action='Check-in tại sự kiện',
+                details=f"Check-in (thiết bị kiosk ESP) lúc {current_time}",
+                actor={'username': member.MSSV, 'name': member.name, 'email': member.email},
+                actor_type='candidate'
+            )
+
             member_data = member_to_dict(member)
             socketio.emit('member_checked_in', member_data)
             logging.info(f"Member checked in (ESP): {member.name}")
@@ -496,6 +666,15 @@ def apply():
         )
         db.session.add(new_member)
         db.session.commit()
+
+        record_audit_log(
+            member_id=new_member.id,
+            action='Nộp hồ sơ ứng tuyển',
+            details=f"Ứng viên nộp hồ sơ trực tuyến tuyển thành viên mảng {new_member.specialist}",
+            actor={'username': new_member.MSSV, 'name': new_member.name, 'email': new_member.email},
+            actor_type='candidate'
+        )
+
         member_data = member_to_dict(new_member)
         socketio.emit('member_added', member_data)
         logging.info(f"New application received: {new_member.name} ({new_member.MSSV})")
@@ -561,6 +740,15 @@ def confirm_participation(token):
     member.state = 'Đã xác nhận'
     member.confirmed_at = format_gmt7_time()
     db.session.commit()
+
+    record_audit_log(
+        member_id=member.id,
+        action='Xác nhận tham gia phỏng vấn',
+        details='Ứng viên tự xác nhận tham gia buổi phỏng vấn qua link và mật khẩu bảo mật',
+        actor={'username': member.MSSV, 'name': member.name, 'email': member.email},
+        actor_type='candidate'
+    )
+
     member_data = member_to_dict(member)
     socketio.emit('member_confirmed', member_data)
     logging.info(f"Candidate confirmed participation: {member.name} ({member.MSSV})")
@@ -584,6 +772,15 @@ def confirm_reschedule(token):
     member.state = 'Xin đổi lịch'
     member.reschedule_request = reason
     db.session.commit()
+
+    record_audit_log(
+        member_id=member.id,
+        action='Yêu cầu đổi lịch phỏng vấn',
+        details=f"Lý do / thời gian mong muốn: {reason}",
+        actor={'username': member.MSSV, 'name': member.name, 'email': member.email},
+        actor_type='candidate'
+    )
+
     member_data = member_to_dict(member)
     socketio.emit('member_reschedule_requested', member_data)
     logging.info(f"Candidate requested reschedule: {member.name} ({member.MSSV})")
