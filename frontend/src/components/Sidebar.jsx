@@ -39,6 +39,7 @@ const Sidebar = ({
   activeTab,
   setActiveTab,
   stats = {},
+  currentUser,
   onOpenCheckin,
   onOpenCheckinQr,
   onLogout,
@@ -296,31 +297,45 @@ const Sidebar = ({
         <Flex align="center" justify={isSidebarMinimized ? "center" : "space-between"}>
           {!isSidebarMinimized && (
             <HStack spacing={2.5} overflow="hidden">
-              <Box
-                w="32px"
-                h="32px"
-                borderRadius="full"
-                bg="dark.750"
-                border="1px solid"
-                borderColor="dark.border"
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                fontSize="xs"
-                fontWeight="bold"
-                color="primary.500"
-                flexShrink={0}
-              >
-                AD
-              </Box>
+              {currentUser?.picture ? (
+                <Box
+                  as="img"
+                  src={currentUser.picture}
+                  alt={currentUser.display_name || 'User Avatar'}
+                  w="32px"
+                  h="32px"
+                  borderRadius="full"
+                  border="1px solid"
+                  borderColor="dark.border"
+                  flexShrink={0}
+                />
+              ) : (
+                <Box
+                  w="32px"
+                  h="32px"
+                  borderRadius="full"
+                  bg="rgba(58, 197, 105, 0.15)"
+                  border="1px solid"
+                  borderColor="rgba(58, 197, 105, 0.3)"
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  fontSize="xs"
+                  fontWeight="bold"
+                  color="primary.500"
+                  flexShrink={0}
+                >
+                  {currentUser?.name ? currentUser.name.trim().slice(-1) : 'AD'}
+                </Box>
+              )}
               <Box overflow="hidden">
                 <Text fontSize="xs" fontWeight="semibold" color="white" isTruncated>
-                  Ban Quản Trị
+                  {currentUser?.display_name || currentUser?.name || 'Ban Quản Trị'}
                 </Text>
                 <HStack spacing={1}>
                   <Box w="6px" h="6px" borderRadius="full" bg="primary.500" />
-                  <Text fontSize="10px" color="whiteAlpha.500">
-                    BK-AUTO SSO
+                  <Text fontSize="10px" color="whiteAlpha.500" isTruncated>
+                    {currentUser?.role_clb || currentUser?.username || 'BK-AUTO SSO'}
                   </Text>
                 </HStack>
               </Box>

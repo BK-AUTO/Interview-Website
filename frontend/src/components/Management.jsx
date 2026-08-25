@@ -52,8 +52,10 @@ import {
   FaCheckCircle,
   FaFilePdf,
   FaArrowRight,
+  FaEye,
 } from 'react-icons/fa';
 import api from '../api/axios';
+import CandidateDetailModal from './CandidateDetailModal';
 
 const STATE_BADGE_PROPS = {
   'Chờ duyệt': { bg: 'rgba(115, 115, 115, 0.15)', color: 'whiteAlpha.700', borderColor: 'rgba(115, 115, 115, 0.3)' },
@@ -71,6 +73,7 @@ const Management = ({ members, setMembers }) => {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
   const [filterConfig, setFilterConfig] = useState({ name: '', MSSV: '', specialist: '', state: '' });
   const [selectedMember, setSelectedMember] = useState(null);
+  const [detailCandidate, setDetailCandidate] = useState(null);
   const [isAdvancingId, setIsAdvancingId] = useState(null);
 
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
@@ -525,6 +528,17 @@ const Management = ({ members, setMembers }) => {
 
                       <Td py={3} textAlign="right">
                         <HStack spacing={1} justify="flex-end">
+                          <Tooltip label="Xem chi tiết & Lịch sử thao tác" hasArrow bg="dark.800" color="white">
+                            <IconButton
+                              size="xs"
+                              variant="ghost"
+                              icon={<FaEye />}
+                              color="whiteAlpha.700"
+                              _hover={{ bg: 'dark.700', color: 'primary.400' }}
+                              onClick={() => setDetailCandidate(member)}
+                              aria-label="Xem chi tiết"
+                            />
+                          </Tooltip>
                           <Tooltip label="Chỉnh sửa" hasArrow bg="dark.800" color="white">
                             <IconButton
                               size="xs"
@@ -533,6 +547,7 @@ const Management = ({ members, setMembers }) => {
                               color="whiteAlpha.700"
                               _hover={{ bg: 'dark.700', color: 'white' }}
                               onClick={() => openEditModal(member)}
+                              aria-label="Chỉnh sửa"
                             />
                           </Tooltip>
                           <Tooltip label="Xoá ứng viên" hasArrow bg="dark.800" color="white">
@@ -543,6 +558,7 @@ const Management = ({ members, setMembers }) => {
                               color="danger.500"
                               _hover={{ bg: 'rgba(245, 34, 45, 0.12)', color: 'danger.500' }}
                               onClick={() => handleDeleteClick(member)}
+                              aria-label="Xoá ứng viên"
                             />
                           </Tooltip>
                         </HStack>
@@ -684,6 +700,15 @@ const Management = ({ members, setMembers }) => {
           </AlertDialogContent>
         </AlertDialogOverlay>
       </AlertDialog>
+
+      {/* Candidate Profile & Audit History Modal */}
+      {detailCandidate && (
+        <CandidateDetailModal
+          isOpen={!!detailCandidate}
+          onClose={() => setDetailCandidate(null)}
+          candidate={detailCandidate}
+        />
+      )}
     </Box>
   );
 };

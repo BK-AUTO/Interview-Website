@@ -11,6 +11,7 @@ import {
   Td,
   Text,
   Button,
+  IconButton,
   HStack,
   VStack,
   Badge,
@@ -18,6 +19,7 @@ import {
   SimpleGrid,
   Input,
   Select,
+  Tooltip,
 } from '@chakra-ui/react';
 import {
   FaClipboardCheck,
@@ -26,13 +28,16 @@ import {
   FaFilePdf,
   FaCheck,
   FaTimes,
+  FaEye,
 } from 'react-icons/fa';
 import api from '../api/axios';
 import ConfirmCredentialsModal from './ConfirmCredentialsModal';
+import CandidateDetailModal from './CandidateDetailModal';
 
 const ApplicationScreening = ({ members, setMembers }) => {
   const toast = useToast();
   const [credentialsModal, setCredentialsModal] = useState(null);
+  const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [processingId, setProcessingId] = useState(null);
@@ -342,6 +347,17 @@ const ApplicationScreening = ({ members, setMembers }) => {
 
                       <Td py={3} textAlign="right">
                         <HStack spacing={2} justify="flex-end">
+                          <Tooltip label="Xem chi tiết & Lịch sử thao tác" placement="top">
+                            <IconButton
+                              size="xs"
+                              variant="ghost"
+                              icon={<FaEye />}
+                              color="whiteAlpha.700"
+                              _hover={{ color: 'primary.400', bg: 'dark.700' }}
+                              onClick={() => setSelectedCandidate(member)}
+                              aria-label="Xem chi tiết"
+                            />
+                          </Tooltip>
                           <Button
                             size="xs"
                             colorScheme="primary"
@@ -379,6 +395,14 @@ const ApplicationScreening = ({ members, setMembers }) => {
           candidateName={credentialsModal.candidateName}
           url={credentialsModal.url}
           password={credentialsModal.password}
+        />
+      )}
+
+      {selectedCandidate && (
+        <CandidateDetailModal
+          isOpen={!!selectedCandidate}
+          onClose={() => setSelectedCandidate(null)}
+          candidate={selectedCandidate}
         />
       )}
     </Box>

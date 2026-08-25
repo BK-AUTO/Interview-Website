@@ -41,6 +41,7 @@ const TAB_TITLES = [
 
 function App() {
   const [members, setMembers] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
   const [isSidebarMinimized, setIsSidebarMinimized] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -238,6 +239,17 @@ function App() {
     };
   }, [members]);
 
+  // Fetch current Authentik user profile
+  useEffect(() => {
+    if (isAuthenticated) {
+      api.get('/api/auth/me')
+        .then((res) => setCurrentUser(res.data))
+        .catch((err) => console.error('Error fetching user profile:', err));
+    } else {
+      setCurrentUser(null);
+    }
+  }, [isAuthenticated]);
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     setIsAuthenticated(false);
@@ -259,6 +271,7 @@ function App() {
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           stats={stats}
+          currentUser={currentUser}
           onOpenCheckin={onCheckinOpen}
           onOpenCheckinQr={onCheckinQrOpen}
           onLogout={handleLogout}
@@ -275,6 +288,7 @@ function App() {
                 onMobileMenuClose();
               }}
               stats={stats}
+              currentUser={currentUser}
               onOpenCheckin={() => {
                 onCheckinOpen();
                 onMobileMenuClose();

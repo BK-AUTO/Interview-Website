@@ -11,12 +11,14 @@ import {
   Td,
   Text,
   Button,
+  IconButton,
   HStack,
   Badge,
   useToast,
   SimpleGrid,
   Input,
   Select,
+  Tooltip,
 } from '@chakra-ui/react';
 import {
   FaUserCheck,
@@ -25,9 +27,11 @@ import {
   FaUserTimes,
   FaKey,
   FaLink,
+  FaEye,
 } from 'react-icons/fa';
 import api from '../api/axios';
 import ConfirmCredentialsModal from './ConfirmCredentialsModal';
+import CandidateDetailModal from './CandidateDetailModal';
 
 const STATE_BADGE_PROPS = {
   'Đậu vòng đơn': {
@@ -61,6 +65,7 @@ const RELEVANT_STATES = ['Đậu vòng đơn', 'Xin đổi lịch', 'Đã xác n
 const ApprovedCandidates = ({ members, setMembers }) => {
   const toast = useToast();
   const [credentialsModal, setCredentialsModal] = useState(null);
+  const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [resettingId, setResettingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [stateFilter, setStateFilter] = useState('');
@@ -331,30 +336,41 @@ const ApprovedCandidates = ({ members, setMembers }) => {
                       </Td>
 
                       <Td py={3} textAlign="right">
-                        {member.state === 'Trượt vòng đơn' ? (
-                          <Text fontSize="xs" color="whiteAlpha.400">-</Text>
-                        ) : (
-                          <HStack spacing={2} justify="flex-end">
-                            <Button
+                        <HStack spacing={2} justify="flex-end">
+                          <Tooltip label="Xem chi tiết & Lịch sử thao tác" placement="top">
+                            <IconButton
                               size="xs"
-                              variant="outline"
-                              colorScheme="primary"
-                              leftIcon={<FaLink />}
-                              onClick={() => showLink(member)}
-                            >
-                              Xem link
-                            </Button>
-                            <Button
-                              size="xs"
-                              colorScheme="primary"
-                              leftIcon={<FaKey />}
-                              onClick={() => resetConfirmation(member)}
-                              isLoading={resettingId === member.id}
-                            >
-                              Tạo mật khẩu mới
-                            </Button>
-                          </HStack>
-                        )}
+                              variant="ghost"
+                              icon={<FaEye />}
+                              color="whiteAlpha.700"
+                              _hover={{ color: 'primary.400', bg: 'dark.700' }}
+                              onClick={() => setSelectedCandidate(member)}
+                              aria-label="Xem chi tiết"
+                            />
+                          </Tooltip>
+                          {member.state !== 'Trượt vòng đơn' && (
+                            <>
+                              <Button
+                                size="xs"
+                                variant="outline"
+                                colorScheme="primary"
+                                leftIcon={<FaLink />}
+                                onClick={() => showLink(member)}
+                              >
+                                Xem link
+                              </Button>
+                              <Button
+                                size="xs"
+                                colorScheme="primary"
+                                leftIcon={<FaKey />}
+                                onClick={() => resetConfirmation(member)}
+                                isLoading={resettingId === member.id}
+                              >
+                                Tạo mật khẩu mới
+                              </Button>
+                            </>
+                          )}
+                        </HStack>
                       </Td>
                     </Tr>
                   );
@@ -372,6 +388,14 @@ const ApprovedCandidates = ({ members, setMembers }) => {
           candidateName={credentialsModal.candidateName}
           url={credentialsModal.url}
           password={credentialsModal.password}
+        />
+      )}
+
+      {selectedCandidate && (
+        <CandidateDetailModal
+          isOpen={!!selectedCandidate}
+          onClose={() => setSelectedCandidate(null)}
+          candidate={selectedCandidate}
         />
       )}
     </Box>
