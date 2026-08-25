@@ -9,12 +9,11 @@ const api = axios.create({
   withCredentials: false
 });
 
-// Temporarily disable token injection for JWT
 api.interceptors.request.use((config) => {
-  // const token = localStorage.getItem('token');
-  // if (token) {
-  //   config.headers.Authorization = `Bearer ${token}`;
-  // }
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 });
 
@@ -24,6 +23,10 @@ api.interceptors.response.use(
     console.error('API Error:', error.response?.data || error.message || error);
     if (error.message === 'Network Error') {
       console.error('This appears to be a CORS or network connectivity issue');
+    }
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      window.location.reload();
     }
     return Promise.reject(error);
   }

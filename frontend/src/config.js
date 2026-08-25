@@ -1,7 +1,7 @@
 // Backend API URL
 // When using locally, use localhost instead of 0.0.0.0
 // For LAN access, use your machine's actual IP address (e.g., 192.168.1.100)
-export const BASE_URL = 'https://apiinter.bkauto.vn';
+export const BASE_URL = 'http://localhost:8091'; // For local development
 
 // Alternative: For network access, uncomment and use your actual IP address
 // export const BASE_URL = 'http://192.168.1.XXX:8091'; // Replace with your actual IP

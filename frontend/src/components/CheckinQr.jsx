@@ -8,25 +8,24 @@ import {
   ModalCloseButton,
   ModalBody,
   ModalFooter,
-  useDisclosure,
   FormControl,
   FormLabel,
-  Flex,
   Input,
   useToast,
-  Container,
+  VStack,
+  HStack,
+  Text,
   Box,
-  Text
 } from '@chakra-ui/react';
-import { IoMdQrScanner } from "react-icons/io";
+import { FaQrcode, FaCamera } from 'react-icons/fa';
 import QrScanner from 'qr-scanner';
-import { BASE_URL} from '../config';
+import api from '../api/axios';
 
-const Checkin = () => {
-  const { isOpen, onOpen, onClose } = useDisclosure();
+const CheckinQr = ({ isOpen, onClose }) => {
   const [uid, setUid] = useState('');
   const [scannedData, setScannedData] = useState('');
   const [isFlipped, setIsFlipped] = useState(false);
+  const [loading, setLoading] = useState(false);
   const videoRef = useRef(null);
   const qrScannerRef = useRef(null);
   const toast = useToast();
@@ -35,7 +34,7 @@ const Checkin = () => {
     if (isOpen && videoRef.current) {
       const qrScanner = new QrScanner(
         videoRef.current,
-        result => setScannedData(result.data), // Extract the data property
+        result => setScannedData(result.data),
         {
           onDecodeError: error => console.error(error),
           highlightScanRegion: true,
@@ -44,12 +43,11 @@ const Checkin = () => {
       );
       qrScannerRef.current = qrScanner;
 
-      // Start the QR scanner
       qrScanner.start().catch(error => {
         console.error('Error starting QR scanner:', error);
         toast({
-          title: "Camera Error",
-          description: "Unable to access the camera. Please check your camera permissions.",
+          title: "Không mở được Camera",
+          description: "Vui lòng cấp quyền truy cập camera trên trình duyệt của bạn.",
           status: "error",
           duration: 5000,
           isClosable: true,
@@ -60,7 +58,7 @@ const Checkin = () => {
         qrScanner.stop();
       };
     }
-  }, [isOpen]);
+  }, [isOpen, toast]);
 
   useEffect(() => {
     if (scannedData) {
@@ -69,39 +67,45 @@ const Checkin = () => {
   }, [scannedData]);
 
   const handleCheckin = async () => {
-    try {
-      const response = await fetch(BASE_URL + '/checkin/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ uid })
+    if (!uid.trim()) {
+      toast({
+        title: "Chưa có mã",
+        description: "Vui lòng quét mã QR hoặc nhập MSSV/UID trước khi xác nhận",
+        status: "warning",
+        duration: 3000,
+        isClosable: true,
       });
-      const data = await response.json();
-      
-      if (response.ok) {
-        const { name, checkin_time, speciality } = data.member;
-        const date = new Date(checkin_time);
-        const formattedTime = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')} ${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await api.post('/api/checkin', { uid: uid.trim() });
+      if (response.data && response.data.member) {
+        const { name, checkin_time, specialist } = response.data.member;
+        const displayTime = checkin_time || 'N/A';
         toast({
-          title: `${name} check-in thành công`,
-          description: `Thành viên ${name} mảng ${speciality} đã check-in vào lúc ${formattedTime}`,
+          title: "Check-in thành công!",
+          description: `Ứng viên ${name} (${specialist || 'Chưa phân mảng'}) đã check-in lúc ${displayTime}`,
           status: "success",
           duration: 5000,
           isClosable: true,
         });
+        setUid('');
+        setScannedData('');
         onClose();
-      } else {
-        throw new Error(data.message);
       }
     } catch (error) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Check-in thất bại';
       toast({
-        title: "Check-in failed",
-        description: error.message,
+        title: "Check-in thất bại",
+        description: errorMsg,
         status: "error",
         duration: 3000,
         isClosable: true,
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -110,54 +114,96 @@ const Checkin = () => {
   };
 
   return (
-    <>
-      <Button onClick={onOpen}>
-        <IoMdQrScanner size={20} />
-      </Button>
+    <Modal isOpen={isOpen} onClose={onClose} isCentered size="lg">
+      <ModalOverlay bg="blackAlpha.800" backdropFilter="blur(4px)" />
+      <ModalContent bg="dark.800" borderColor="dark.border" borderWidth="1px" borderRadius="xl">
+        <ModalHeader borderBottomWidth="1px" borderColor="dark.border" py={4}>
+          <HStack spacing={3}>
+            <Box p={2} borderRadius="lg" bg="rgba(24, 144, 255, 0.12)" color="info.500">
+              <FaQrcode size={18} />
+            </Box>
+            <Box>
+              <Text fontSize="md" fontWeight="bold" color="white">
+                Quét mã QR Check-in
+              </Text>
+              <Text fontSize="xs" fontWeight="normal" color="whiteAlpha.600">
+                Đưa mã QR trước camera hoặc nhập MSSV/UID bên dưới
+              </Text>
+            </Box>
+          </HStack>
+        </ModalHeader>
+        <ModalCloseButton color="whiteAlpha.600" />
+        
+        <ModalBody py={5}>
+          <VStack spacing={4} align="stretch">
+            {/* Video container */}
+            <Box
+              p={2}
+              borderWidth="1px"
+              borderColor="dark.border"
+              borderRadius="lg"
+              bg="dark.900"
+              position="relative"
+              overflow="hidden"
+            >
+              <video
+                ref={videoRef}
+                style={{
+                  width: '100%',
+                  height: '240px',
+                  objectFit: 'cover',
+                  borderRadius: '6px',
+                  transform: isFlipped ? 'scaleX(-1)' : 'none',
+                }}
+                playsInline
+              />
+              <Button
+                size="xs"
+                position="absolute"
+                bottom={3}
+                right={3}
+                variant="solid"
+                bg="dark.800"
+                borderColor="dark.border"
+                borderWidth="1px"
+                leftIcon={<FaCamera />}
+                onClick={toggleFlip}
+                color="whiteAlpha.800"
+              >
+                Lật Camera
+              </Button>
+            </Box>
 
-      <Modal isOpen={isOpen} onClose={onClose}>
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>Check-in Page</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <Flex alignItems={"center"} justifyContent={"center"} direction="column">
-              <FormControl>
-                <FormLabel>UID</FormLabel>
-                <Input 
-                  placeholder='Nhập UID được gửi trong mail của bạn'
-                  value={uid}
-                  onChange={(e) => setUid(e.target.value)}
-                />
-              </FormControl>
-              <Container maxW="md" centerContent mt={4}>
-                <Box p={4} borderWidth={1} borderRadius="lg" boxShadow="lg" w="100%">
-                  <Text fontSize="xl" mb={4}>Scan QR Code</Text>
-                  <video
-                    ref={videoRef}
-                    style={{
-                      width: '100%',
-                      transform: isFlipped ? 'scaleX(-1)' : 'none'
-                    }}
-                    playsInline
-                  />
-                  <Button mt={4} onClick={toggleFlip}>
-                    {isFlipped ? 'Unflip Video' : 'Flip Video'}
-                  </Button>
-                </Box>
-              </Container>
-            </Flex>
-          </ModalBody>
-          <ModalFooter>
-            <Button colorScheme="blue" mr={3} onClick={handleCheckin}>
-              Check-in
-            </Button>
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
-    </>
+            <FormControl>
+              <FormLabel fontSize="sm" fontWeight="medium" color="whiteAlpha.800">
+                Mã đã quét / MSSV
+              </FormLabel>
+              <Input 
+                placeholder="Dữ liệu từ mã QR hoặc nhập tay MSSV"
+                value={uid}
+                onChange={(e) => setUid(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCheckin()}
+              />
+            </FormControl>
+          </VStack>
+        </ModalBody>
+
+        <ModalFooter borderTopWidth="1px" borderColor="dark.border">
+          <Button variant="ghost" mr={3} onClick={onClose} isDisabled={loading} color="whiteAlpha.700">
+            Hủy
+          </Button>
+          <Button 
+            colorScheme="primary" 
+            onClick={handleCheckin} 
+            isLoading={loading}
+            loadingText="Đang check-in..."
+          >
+            Xác nhận Check-in
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
   );
 };
 
-export default Checkin;
+export default CheckinQr;
