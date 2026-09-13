@@ -13,12 +13,17 @@ import {
   Button,
   IconButton,
   HStack,
+  VStack,
   Badge,
   useToast,
   SimpleGrid,
   Input,
   Select,
   Tooltip,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
 } from '@chakra-ui/react';
 import {
   FaUserCheck,
@@ -28,10 +33,18 @@ import {
   FaKey,
   FaLink,
   FaEye,
+  FaChevronDown,
 } from 'react-icons/fa';
 import api from '../api/axios';
 import ConfirmCredentialsModal from './ConfirmCredentialsModal';
 import CandidateDetailModal from './CandidateDetailModal';
+import {
+  DEPARTMENT_LABELS,
+  SUB_DEPARTMENT_STATES,
+  SUB_DEPARTMENT_STATE_PROPS,
+  parseSubDepartments,
+  parseSubDepartmentStates,
+} from '../config';
 
 const STATE_BADGE_PROPS = {
   'Đậu vòng đơn': {
@@ -69,11 +82,21 @@ const ApprovedCandidates = ({ members, setMembers }) => {
   const [resettingId, setResettingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [stateFilter, setStateFilter] = useState('');
+  const [subDeptFilter, setSubDeptFilter] = useState('');
 
   const candidates = useMemo(
     () => members.filter((m) => RELEVANT_STATES.includes(m.state)),
     [members]
   );
+
+  const uniqueSubDepartments = useMemo(() => {
+    const allSubs = new Set();
+    candidates.forEach((m) => {
+      const subs = parseSubDepartments(m.sub_departments);
+      subs.forEach((s) => allSubs.add(s));
+    });
+    return [...allSubs];
+  }, [candidates]);
 
   const stats = useMemo(() => {
     return {
@@ -91,9 +114,14 @@ const ApprovedCandidates = ({ members, setMembers }) => {
         m.MSSV.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (m.specialist && m.specialist.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchState = stateFilter === '' || m.state === stateFilter;
-      return matchSearch && matchState;
+
+      const memberSubs = parseSubDepartments(m.sub_departments);
+      const matchSub =
+        subDeptFilter === '' || memberSubs.includes(subDeptFilter);
+
+      return matchSearch && matchState && matchSub;
     });
-  }, [candidates, searchTerm, stateFilter]);
+  }, [candidates, searchTerm, stateFilter, subDeptFilter]);
 
   const resetConfirmation = async (member) => {
     setResettingId(member.id);
@@ -134,6 +162,34 @@ const ApprovedCandidates = ({ members, setMembers }) => {
     setCredentialsModal({ candidateName: member.name, url: member.confirm_url, password: null });
   };
 
+  const handleUpdateSubDeptState = async (member, subKey, newSubState) => {
+    const currentSubStates = parseSubDepartmentStates(member.sub_department_states);
+    const updatedSubStates = { ...currentSubStates, [subKey]: newSubState };
+
+    try {
+      const response = await api.put(`/api/members/${member.id}`, {
+        sub_department_states: updatedSubStates,
+      });
+      setMembers((prev) => prev.map((m) => (m.id === member.id ? response.data.member : m)));
+      toast({
+        title: `Mảng phụ [${DEPARTMENT_LABELS[subKey] || subKey}]: ${newSubState}`,
+        description: `Đã cập nhật trạng thái phỏng vấn mảng phụ của ${member.name}`,
+        status: 'success',
+        duration: 2500,
+        isClosable: true,
+      });
+    } catch (error) {
+      console.error('Error updating sub department state:', error);
+      toast({
+        title: 'Lỗi cập nhật mảng phụ',
+        description: error.response?.data?.message || error.message,
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
   return (
     <Box pb={8}>
       {/* Page Title */}
@@ -147,7 +203,7 @@ const ApprovedCandidates = ({ members, setMembers }) => {
               Ứng viên đã duyệt & Quản lý xác nhận
             </Heading>
             <Text fontSize="xs" color="gray.500">
-              Quản lý danh sách ứng viên đậu/trượt vòng đơn, lấy link và mã xác nhận gửi cho ứng viên
+              Quản lý danh sách ứng viên đậu/trượt vòng đơn, 2 flow phỏng vấn mảng chính / mảng phụ và cấp link xác nhận
             </Text>
           </Box>
         </HStack>
@@ -225,13 +281,27 @@ const ApprovedCandidates = ({ members, setMembers }) => {
         <HStack spacing={4} flexWrap="wrap">
           <Box flex="1" minW="240px">
             <Input
-              placeholder="Tìm theo tên, MSSV, mảng ứng tuyển..."
+              placeholder="Tìm theo tên, MSSV, mảng chuyên môn..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               size="sm"
             />
           </Box>
-          <Box w={{ base: 'full', sm: '200px' }}>
+          <Box w={{ base: 'full', sm: '180px' }}>
+            <Select
+              placeholder="Tất cả mảng phụ"
+              value={subDeptFilter}
+              onChange={(e) => setSubDeptFilter(e.target.value)}
+              size="sm"
+            >
+              {uniqueSubDepartments.map((s) => (
+                <option key={s} value={s} style={{ background: '#ffffff', color: '#141414' }}>
+                  {DEPARTMENT_LABELS[s] || s}
+                </option>
+              ))}
+            </Select>
+          </Box>
+          <Box w={{ base: 'full', sm: '180px' }}>
             <Select
               placeholder="Tất cả trạng thái"
               value={stateFilter}
@@ -263,8 +333,9 @@ const ApprovedCandidates = ({ members, setMembers }) => {
               <Thead bg="gray.50">
                 <Tr>
                   <Th color="gray.500" py={3.5} fontSize="11px">Ứng viên</Th>
-                  <Th color="gray.500" py={3.5} fontSize="11px">Mảng ứng tuyển</Th>
-                  <Th color="gray.500" py={3.5} fontSize="11px">Trạng thái xác nhận</Th>
+                  <Th color="gray.500" py={3.5} fontSize="11px">Chuyên môn (Chính / Phụ)</Th>
+                  <Th color="gray.500" py={3.5} fontSize="11px">Flow Mảng chính</Th>
+                  <Th color="gray.500" py={3.5} fontSize="11px">Flow Mảng phụ</Th>
                   <Th color="gray.500" py={3.5} fontSize="11px">Yêu cầu đổi lịch</Th>
                   <Th color="gray.500" py={3.5} fontSize="11px" textAlign="right">Thao tác xác nhận</Th>
                 </Tr>
@@ -276,6 +347,9 @@ const ApprovedCandidates = ({ members, setMembers }) => {
                     color: 'gray.900',
                     borderColor: 'gray.200',
                   };
+
+                  const subDepts = parseSubDepartments(member.sub_departments);
+                  const subStates = parseSubDepartmentStates(member.sub_department_states);
 
                   return (
                     <Tr
@@ -300,12 +374,37 @@ const ApprovedCandidates = ({ members, setMembers }) => {
                         </HStack>
                       </Td>
 
-                      <Td py={3}>
-                        <Badge bg="gray.100" color="gray.700" fontSize="xs">
-                          {member.specialist}
-                        </Badge>
+                      {/* Specialist (Main & Sub) */}
+                      <Td py={3} maxW="220px">
+                        <VStack align="flex-start" spacing={1}>
+                          <Badge bg="rgba(58, 197, 105, 0.12)" color="primary.600" fontSize="xs">
+                            {DEPARTMENT_LABELS[member.specialist] || member.specialist || 'Chung'}
+                          </Badge>
+                          {subDepts.length > 0 ? (
+                            <HStack spacing={1} flexWrap="wrap">
+                              <Text fontSize="10px" color="gray.400" fontWeight="bold">Phụ:</Text>
+                              {subDepts.map((sub) => (
+                                <Badge
+                                  key={sub}
+                                  variant="subtle"
+                                  colorScheme="purple"
+                                  fontSize="10px"
+                                  px={1.5}
+                                  borderRadius="md"
+                                >
+                                  {DEPARTMENT_LABELS[sub] || sub}
+                                </Badge>
+                              ))}
+                            </HStack>
+                          ) : (
+                            <Text fontSize="10px" color="gray.400" fontStyle="italic">
+                              Không có mảng phụ
+                            </Text>
+                          )}
+                        </VStack>
                       </Td>
 
+                      {/* Main Flow State */}
                       <Td py={3}>
                         <Badge
                           bg={badgeStyle.bg}
@@ -317,13 +416,69 @@ const ApprovedCandidates = ({ members, setMembers }) => {
                           {member.state}
                         </Badge>
                         {member.confirmed_at && (
-                          <Text fontSize="10px" color="gray.300" mt={0.5}>
+                          <Text fontSize="10px" color="gray.400" mt={0.5}>
                             Lúc {member.confirmed_at}
                           </Text>
                         )}
                       </Td>
 
-                      <Td py={3} maxW="240px">
+                      {/* Sub-Department Flow State & Actions */}
+                      <Td py={3} maxW="250px">
+                        {subDepts.length > 0 ? (
+                          <VStack align="flex-start" spacing={1.5}>
+                            {subDepts.map((sub) => {
+                              const currentSubState = subStates[sub] || 'Chờ duyệt';
+                              const subStyle = SUB_DEPARTMENT_STATE_PROPS[currentSubState] || {
+                                bg: 'gray.100',
+                                color: 'gray.700',
+                                borderColor: 'gray.200',
+                              };
+
+                              return (
+                                <HStack key={sub} spacing={1.5} flexWrap="wrap" justify="space-between" w="full">
+                                  <Text fontSize="xs" fontWeight="medium" color="gray.700">
+                                    {DEPARTMENT_LABELS[sub] || sub}:
+                                  </Text>
+
+                                  <Menu size="xs" isLazy>
+                                    <MenuButton
+                                      as={Button}
+                                      size="xs"
+                                      h="20px"
+                                      px={2}
+                                      fontSize="10px"
+                                      bg={subStyle.bg}
+                                      color={subStyle.color}
+                                      borderWidth="1px"
+                                      borderColor={subStyle.borderColor}
+                                      rightIcon={<FaChevronDown size={8} />}
+                                    >
+                                      {currentSubState}
+                                    </MenuButton>
+                                    <MenuList fontSize="xs" minW="130px" zIndex={10}>
+                                      {SUB_DEPARTMENT_STATES.map((st) => (
+                                        <MenuItem
+                                          key={st}
+                                          onClick={() => handleUpdateSubDeptState(member, sub, st)}
+                                          fontWeight={currentSubState === st ? 'bold' : 'normal'}
+                                          bg={currentSubState === st ? 'primary.50' : 'transparent'}
+                                          color={currentSubState === st ? 'primary.600' : 'gray.800'}
+                                        >
+                                          {st}
+                                        </MenuItem>
+                                      ))}
+                                    </MenuList>
+                                  </Menu>
+                                </HStack>
+                              );
+                            })}
+                          </VStack>
+                        ) : (
+                          <Text fontSize="xs" color="gray.400">-</Text>
+                        )}
+                      </Td>
+
+                      <Td py={3} maxW="220px">
                         {member.reschedule_request ? (
                           <Box p={1.5} borderRadius="md" bg="rgba(250, 173, 20, 0.08)" border="1px solid" borderColor="rgba(250, 173, 20, 0.2)">
                             <Text fontSize="xs" color="warning.700" noOfLines={2}>
@@ -337,7 +492,7 @@ const ApprovedCandidates = ({ members, setMembers }) => {
 
                       <Td py={3} textAlign="right">
                         <HStack spacing={2} justify="flex-end">
-                          <Tooltip label="Xem chi tiết & Lịch sử thao tác" placement="top">
+                          <Tooltip label="Xem chi tiết & Tiến trình 2 flow" placement="top">
                             <IconButton
                               size="xs"
                               variant="ghost"
@@ -366,7 +521,7 @@ const ApprovedCandidates = ({ members, setMembers }) => {
                                 onClick={() => resetConfirmation(member)}
                                 isLoading={resettingId === member.id}
                               >
-                                Tạo mật khẩu mới
+                                Mật khẩu mới
                               </Button>
                             </>
                           )}
@@ -397,6 +552,7 @@ const ApprovedCandidates = ({ members, setMembers }) => {
           onClose={() => setSelectedCandidate(null)}
           candidate={selectedCandidate}
           members={members}
+          setMembers={setMembers}
         />
       )}
     </Box>
@@ -404,3 +560,4 @@ const ApprovedCandidates = ({ members, setMembers }) => {
 };
 
 export default ApprovedCandidates;
+

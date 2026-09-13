@@ -37,6 +37,10 @@ import {
   FormLabel,
   Textarea,
   Tooltip,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
 } from '@chakra-ui/react';
 import {
   TriangleDownIcon,
@@ -44,6 +48,7 @@ import {
   EditIcon,
   DeleteIcon,
   AddIcon,
+  ChevronDownIcon,
 } from '@chakra-ui/icons';
 import {
   FaUsers,
@@ -53,10 +58,17 @@ import {
   FaFilePdf,
   FaArrowRight,
   FaEye,
+  FaLayerGroup,
 } from 'react-icons/fa';
 import api from '../api/axios';
 import CandidateDetailModal from './CandidateDetailModal';
-import { DEPARTMENT_LABELS } from '../config';
+import {
+  DEPARTMENT_LABELS,
+  SUB_DEPARTMENT_STATES,
+  SUB_DEPARTMENT_STATE_PROPS,
+  parseSubDepartments,
+  parseSubDepartmentStates,
+} from '../config';
 import { openCandidateCV } from '../utils/cvCache';
 
 const STATE_BADGE_PROPS = {
@@ -73,7 +85,13 @@ const STATE_BADGE_PROPS = {
 
 const Management = ({ members, setMembers }) => {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
-  const [filterConfig, setFilterConfig] = useState({ name: '', MSSV: '', specialist: '', state: '' });
+  const [filterConfig, setFilterConfig] = useState({
+    name: '',
+    MSSV: '',
+    specialist: '',
+    subDepartment: '',
+    state: '',
+  });
   const [selectedMember, setSelectedMember] = useState(null);
   const [detailCandidate, setDetailCandidate] = useState(null);
   const [isAdvancingId, setIsAdvancingId] = useState(null);
@@ -85,6 +103,15 @@ const Management = ({ members, setMembers }) => {
 
   const uniqueSpecialists = useMemo(() => {
     return [...new Set(members.map((m) => m.specialist).filter(Boolean))];
+  }, [members]);
+
+  const uniqueSubDepartments = useMemo(() => {
+    const allSubs = new Set();
+    members.forEach((m) => {
+      const subs = parseSubDepartments(m.sub_departments);
+      subs.forEach((s) => allSubs.add(s));
+    });
+    return [...allSubs];
   }, [members]);
 
   const stats = useMemo(() => {
@@ -116,7 +143,12 @@ const Management = ({ members, setMembers }) => {
       const matchMSSV = member.MSSV.toLowerCase().includes(filterConfig.MSSV.toLowerCase());
       const matchSpecialist = filterConfig.specialist === '' || member.specialist === filterConfig.specialist;
       const matchState = filterConfig.state === '' || member.state === filterConfig.state;
-      return matchName && matchMSSV && matchSpecialist && matchState;
+
+      const memberSubs = parseSubDepartments(member.sub_departments);
+      const matchSub =
+        filterConfig.subDepartment === '' || memberSubs.includes(filterConfig.subDepartment);
+
+      return matchName && matchMSSV && matchSpecialist && matchSub && matchState;
     });
   }, [sortedMembers, filterConfig]);
 
@@ -146,6 +178,8 @@ const Management = ({ members, setMembers }) => {
         name: '',
         MSSV: '',
         specialist: '',
+        sub_departments: '[]',
+        sub_department_states: '{}',
         email: '',
         phone: '',
         linkCV: '',
@@ -209,7 +243,7 @@ const Management = ({ members, setMembers }) => {
   };
 
   // State pipeline advance: 'Đã checkin' -> 'Gọi PV' -> 'Đang phỏng vấn' -> 'Đã phỏng vấn'
-  const handleAdvanceState = async (member) => {
+  const handleAdvanceMainState = async (member) => {
     let nextState = '';
     if (member.state === 'Đã checkin') nextState = 'Gọi PV';
     else if (member.state === 'Gọi PV') nextState = 'Đang phỏng vấn';
@@ -221,8 +255,8 @@ const Management = ({ members, setMembers }) => {
       const response = await api.put(`/api/members/${member.id}`, { state: nextState });
       setMembers((prev) => prev.map((m) => (m.id === member.id ? response.data.member : m)));
       toast({
-        title: `Đã chuyển sang: ${nextState}`,
-        description: `${member.name} -> ${nextState}`,
+        title: `Mảng chính: ${nextState}`,
+        description: `${member.name} (${DEPARTMENT_LABELS[member.specialist] || member.specialist}) -> ${nextState}`,
         status: 'info',
         duration: 2500,
         isClosable: true,
@@ -232,6 +266,35 @@ const Management = ({ members, setMembers }) => {
       toast({ title: 'Không thể cập nhật trạng thái', status: 'error', duration: 3000, isClosable: true });
     } finally {
       setIsAdvancingId(null);
+    }
+  };
+
+  // Independent Sub-Department State transition
+  const handleUpdateSubDeptState = async (member, subKey, newSubState) => {
+    const currentSubStates = parseSubDepartmentStates(member.sub_department_states);
+    const updatedSubStates = { ...currentSubStates, [subKey]: newSubState };
+
+    try {
+      const response = await api.put(`/api/members/${member.id}`, {
+        sub_department_states: updatedSubStates,
+      });
+      setMembers((prev) => prev.map((m) => (m.id === member.id ? response.data.member : m)));
+      toast({
+        title: `Mảng phụ [${DEPARTMENT_LABELS[subKey] || subKey}]: ${newSubState}`,
+        description: `Đã cập nhật tiến độ phỏng vấn mảng phụ của ${member.name}`,
+        status: 'success',
+        duration: 2500,
+        isClosable: true,
+      });
+    } catch (error) {
+      console.error('Error updating sub department state:', error);
+      toast({
+        title: 'Lỗi cập nhật mảng phụ',
+        description: error.response?.data?.message || error.message,
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
     }
   };
 
@@ -248,7 +311,7 @@ const Management = ({ members, setMembers }) => {
               Quản lý danh sách ứng viên
             </Heading>
             <Text fontSize="xs" color="gray.500">
-              Toàn bộ cơ sở dữ liệu ứng viên tuyển thành viên CLB BK-AUTO và điều phối tiến trình phỏng vấn
+              Toàn bộ cơ sở dữ liệu ứng viên tuyển thành viên và điều phối 2 flow phỏng vấn mảng chính / mảng phụ độc lập
             </Text>
           </Box>
         </HStack>
@@ -331,7 +394,7 @@ const Management = ({ members, setMembers }) => {
               value={filterConfig.name}
               onChange={handleFilterChange}
               size="sm"
-              w={{ base: 'full', sm: '180px' }}
+              w={{ base: 'full', sm: '170px' }}
             />
             <Input
               placeholder="Tìm MSSV..."
@@ -339,10 +402,10 @@ const Management = ({ members, setMembers }) => {
               value={filterConfig.MSSV}
               onChange={handleFilterChange}
               size="sm"
-              w={{ base: 'full', sm: '140px' }}
+              w={{ base: 'full', sm: '130px' }}
             />
             <Select
-              placeholder="Tất cả mảng"
+              placeholder="Tất cả mảng chính"
               name="specialist"
               value={filterConfig.specialist}
               onChange={handleFilterChange}
@@ -356,12 +419,26 @@ const Management = ({ members, setMembers }) => {
               ))}
             </Select>
             <Select
-              placeholder="Tất cả trạng thái"
+              placeholder="Tất cả mảng phụ"
+              name="subDepartment"
+              value={filterConfig.subDepartment}
+              onChange={handleFilterChange}
+              size="sm"
+              w={{ base: 'full', sm: '160px' }}
+            >
+              {uniqueSubDepartments.map((s) => (
+                <option key={s} value={s} style={{ background: '#ffffff', color: '#141414' }}>
+                  {DEPARTMENT_LABELS[s] || s}
+                </option>
+              ))}
+            </Select>
+            <Select
+              placeholder="Trạng thái mảng chính"
               name="state"
               value={filterConfig.state}
               onChange={handleFilterChange}
               size="sm"
-              w={{ base: 'full', sm: '180px' }}
+              w={{ base: 'full', sm: '170px' }}
             >
               {Object.keys(STATE_BADGE_PROPS).map((st) => (
                 <option key={st} value={st} style={{ background: '#ffffff', color: '#141414' }}>
@@ -402,15 +479,17 @@ const Management = ({ members, setMembers }) => {
                   <Th color="gray.500" py={3.5} fontSize="11px" cursor="pointer" onClick={() => requestSort('name')}>
                     Họ và tên {getSortIcon('name')}
                   </Th>
-                  <Th color="gray.500" py={3.5} fontSize="11px" cursor="pointer" onClick={() => requestSort('specialist')}>
-                    Mảng chính {getSortIcon('specialist')}
+                  <Th color="gray.500" py={3.5} fontSize="11px">
+                    Chuyên môn (Chính / Phụ)
                   </Th>
                   <Th color="gray.500" py={3.5} fontSize="11px">CV</Th>
-                  <Th color="gray.500" py={3.5} fontSize="11px" cursor="pointer" onClick={() => requestSort('state')}>
-                    Trạng thái {getSortIcon('state')}
+                  <Th color="gray.500" py={3.5} fontSize="11px">
+                    Flow Mảng chính
+                  </Th>
+                  <Th color="gray.500" py={3.5} fontSize="11px">
+                    Flow Mảng phụ
                   </Th>
                   <Th color="gray.500" py={3.5} fontSize="11px">Check-in</Th>
-                  <Th color="gray.500" py={3.5} fontSize="11px">Tiến trình PV</Th>
                   <Th color="gray.500" py={3.5} fontSize="11px" textAlign="right">Thao tác</Th>
                 </Tr>
               </Thead>
@@ -434,6 +513,9 @@ const Management = ({ members, setMembers }) => {
                     advanceLabel = 'Kết thúc PV';
                     advanceColor = 'success';
                   }
+
+                  const subDepts = parseSubDepartments(member.sub_departments);
+                  const subStates = parseSubDepartmentStates(member.sub_department_states);
 
                   return (
                     <Tr
@@ -459,10 +541,36 @@ const Management = ({ members, setMembers }) => {
                         )}
                       </Td>
 
-                      <Td py={3}>
-                        <Badge bg="gray.100" color="gray.700" fontSize="xs">
-                          {DEPARTMENT_LABELS[member.specialist] || member.specialist}
-                        </Badge>
+                      {/* Specialist (Main & Sub) */}
+                      <Td py={3} maxW="230px">
+                        <VStack align="flex-start" spacing={1}>
+                          <HStack spacing={1.5} flexWrap="wrap">
+                            <Badge bg="rgba(58, 197, 105, 0.12)" color="primary.600" fontSize="xs">
+                              {DEPARTMENT_LABELS[member.specialist] || member.specialist || 'Chung'}
+                            </Badge>
+                          </HStack>
+                          {subDepts.length > 0 ? (
+                            <HStack spacing={1} flexWrap="wrap">
+                              <Text fontSize="10px" color="gray.400" fontWeight="bold">Phụ:</Text>
+                              {subDepts.map((sub) => (
+                                <Badge
+                                  key={sub}
+                                  variant="subtle"
+                                  colorScheme="purple"
+                                  fontSize="10px"
+                                  px={1.5}
+                                  borderRadius="md"
+                                >
+                                  {DEPARTMENT_LABELS[sub] || sub}
+                                </Badge>
+                              ))}
+                            </HStack>
+                          ) : (
+                            <Text fontSize="10px" color="gray.400" fontStyle="italic">
+                              Không có mảng phụ
+                            </Text>
+                          )}
+                        </VStack>
                       </Td>
 
                       <Td py={3}>
@@ -482,16 +590,88 @@ const Management = ({ members, setMembers }) => {
                         )}
                       </Td>
 
+                      {/* Main Flow */}
                       <Td py={3}>
-                        <Badge
-                          bg={badgeStyle.bg}
-                          color={badgeStyle.color}
-                          border="1px solid"
-                          borderColor={badgeStyle.borderColor}
-                          fontSize="xs"
-                        >
-                          {member.state}
-                        </Badge>
+                        <VStack align="flex-start" spacing={1}>
+                          <Badge
+                            bg={badgeStyle.bg}
+                            color={badgeStyle.color}
+                            border="1px solid"
+                            borderColor={badgeStyle.borderColor}
+                            fontSize="xs"
+                          >
+                            {member.state}
+                          </Badge>
+                          {advanceLabel && (
+                            <Button
+                              size="xs"
+                              colorScheme={advanceColor}
+                              rightIcon={<FaArrowRight />}
+                              onClick={() => handleAdvanceMainState(member)}
+                              isLoading={isAdvancingId === member.id}
+                              h="22px"
+                              fontSize="11px"
+                            >
+                              {advanceLabel}
+                            </Button>
+                          )}
+                        </VStack>
+                      </Td>
+
+                      {/* Sub-Department Independent Flow */}
+                      <Td py={3} maxW="260px">
+                        {subDepts.length > 0 ? (
+                          <VStack align="flex-start" spacing={1.5}>
+                            {subDepts.map((sub) => {
+                              const currentSubState = subStates[sub] || 'Chờ duyệt';
+                              const subStyle = SUB_DEPARTMENT_STATE_PROPS[currentSubState] || {
+                                bg: 'gray.100',
+                                color: 'gray.700',
+                                borderColor: 'gray.200',
+                              };
+
+                              return (
+                                <HStack key={sub} spacing={1.5} flexWrap="wrap" justify="space-between" w="full">
+                                  <Text fontSize="xs" fontWeight="medium" color="gray.700">
+                                    {DEPARTMENT_LABELS[sub] || sub}:
+                                  </Text>
+
+                                  <Menu size="xs" isLazy>
+                                    <MenuButton
+                                      as={Button}
+                                      size="xs"
+                                      h="20px"
+                                      px={2}
+                                      fontSize="10px"
+                                      bg={subStyle.bg}
+                                      color={subStyle.color}
+                                      borderWidth="1px"
+                                      borderColor={subStyle.borderColor}
+                                      rightIcon={<ChevronDownIcon />}
+                                    >
+                                      {currentSubState}
+                                    </MenuButton>
+                                    <MenuList fontSize="xs" minW="130px" zIndex={10}>
+                                      {SUB_DEPARTMENT_STATES.map((st) => (
+                                        <MenuItem
+                                          key={st}
+                                          onClick={() => handleUpdateSubDeptState(member, sub, st)}
+                                          fontWeight={currentSubState === st ? 'bold' : 'normal'}
+                                          bg={currentSubState === st ? 'primary.50' : 'transparent'}
+                                          color={currentSubState === st ? 'primary.600' : 'gray.800'}
+                                        >
+                                          {st}
+                                        </MenuItem>
+                                      ))}
+                                    </MenuList>
+                                  </Menu>
+                                </HStack>
+                              );
+                            })}
+                          </VStack>
+                        ) : (
+                          <Text fontSize="xs" color="gray.400">-</Text>
+                        )}
                       </Td>
 
                       <Td py={3}>
@@ -500,25 +680,9 @@ const Management = ({ members, setMembers }) => {
                         </Text>
                       </Td>
 
-                      <Td py={3}>
-                        {advanceLabel ? (
-                          <Button
-                            size="xs"
-                            colorScheme={advanceColor}
-                            rightIcon={<FaArrowRight />}
-                            onClick={() => handleAdvanceState(member)}
-                            isLoading={isAdvancingId === member.id}
-                          >
-                            {advanceLabel}
-                          </Button>
-                        ) : (
-                          <Text fontSize="xs" color="gray.300">-</Text>
-                        )}
-                      </Td>
-
                       <Td py={3} textAlign="right">
                         <HStack spacing={1} justify="flex-end">
-                          <Tooltip label="Xem chi tiết & Lịch sử thao tác" hasArrow placement="top">
+                          <Tooltip label="Xem chi tiết & Tiến trình 2 flow" hasArrow placement="top">
                             <IconButton
                               size="xs"
                               variant="ghost"
@@ -615,15 +779,15 @@ const Management = ({ members, setMembers }) => {
 
                 <HStack spacing={4} w="full">
                   <FormControl isRequired>
-                    <FormLabel fontSize="xs" color="gray.600">Mảng chuyên môn</FormLabel>
+                    <FormLabel fontSize="xs" color="gray.600">Mảng chuyên môn chính</FormLabel>
                     <Input
                       value={selectedMember.specialist || ''}
                       onChange={(e) => setSelectedMember({ ...selectedMember, specialist: e.target.value })}
-                      placeholder="VD: Lập trình nhúng / Thiết kế mạch"
+                      placeholder="VD: electrical / communication"
                     />
                   </FormControl>
                   <FormControl>
-                    <FormLabel fontSize="xs" color="gray.600">Trạng thái</FormLabel>
+                    <FormLabel fontSize="xs" color="gray.600">Trạng thái mảng chính</FormLabel>
                     <Select
                       value={selectedMember.state || 'Đậu vòng đơn'}
                       onChange={(e) => setSelectedMember({ ...selectedMember, state: e.target.value })}
@@ -636,6 +800,19 @@ const Management = ({ members, setMembers }) => {
                     </Select>
                   </FormControl>
                 </HStack>
+
+                <FormControl>
+                  <FormLabel fontSize="xs" color="gray.600">Mảng phụ (JSON array hoặc cách nhau bởi dấu phẩy)</FormLabel>
+                  <Input
+                    value={
+                      Array.isArray(selectedMember.sub_departments)
+                        ? JSON.stringify(selectedMember.sub_departments)
+                        : selectedMember.sub_departments || '[]'
+                    }
+                    onChange={(e) => setSelectedMember({ ...selectedMember, sub_departments: e.target.value })}
+                    placeholder='VD: ["communication", "event"]'
+                  />
+                </FormControl>
 
                 <FormControl>
                   <FormLabel fontSize="xs" color="gray.600">Link CV</FormLabel>
@@ -698,6 +875,7 @@ const Management = ({ members, setMembers }) => {
           onClose={() => setDetailCandidate(null)}
           candidate={detailCandidate}
           members={members}
+          setMembers={setMembers}
         />
       )}
     </Box>
@@ -705,3 +883,4 @@ const Management = ({ members, setMembers }) => {
 };
 
 export default Management;
+

@@ -206,6 +206,7 @@ class Member(db.Model):
     major_class = db.Column(db.String(200))
     student_type = db.Column(db.String(20))  # 'hust' / 'external'
     sub_departments = db.Column(db.String(300))  # JSON array string, e.g. '["electrical","simulation"]'
+    sub_department_states = db.Column(db.String(500), nullable=True, default='{}')  # JSON dict e.g. '{"communication": "Đã phỏng vấn"}'
     linkCV = db.Column(db.String(500))  # Increased size for long URLs
     checkin_time = db.Column(db.String(100), nullable=True)
     state = db.Column(db.String(100), nullable=True, default='Chưa checkin', index=True)
@@ -232,6 +233,7 @@ def member_to_dict(member):
         'school': member.school,
         'application_track': member.application_track or 'engineering',
         'sub_departments': member.sub_departments,
+        'sub_department_states': member.sub_department_states or '{}',
         'linkCV': member.linkCV,
         'checkin_time': member.checkin_time,
         'state': member.state,
@@ -452,6 +454,7 @@ def add_member():
             major_class=data.get('major_class'),
             student_type=data.get('student_type'),
             sub_departments=data.get('sub_departments'),
+            sub_department_states=data.get('sub_department_states', '{}') if isinstance(data.get('sub_department_states'), str) else json.dumps(data.get('sub_department_states', {})),
             linkCV=data.get('linkCV'),
             # Members added manually by an admin are assumed already vetted,
             # so they skip the "Chờ duyệt" screening step used by public /api/apply submissions.
@@ -488,6 +491,7 @@ def edit_member(id):
         member = Member.query.get(id)
         if member:
             previous_state = member.state  # Store previous state to check for transitions
+            prev_sub_states = member.sub_department_states
 
             # Update member data
             member.name = data.get('name', member.name)
@@ -498,6 +502,9 @@ def edit_member(id):
             member.major_class = data.get('major_class', member.major_class)
             member.student_type = data.get('student_type', member.student_type)
             member.sub_departments = data.get('sub_departments', member.sub_departments)
+            if 'sub_department_states' in data:
+                sub_val = data['sub_department_states']
+                member.sub_department_states = json.dumps(sub_val) if isinstance(sub_val, dict) else str(sub_val)
             member.linkCV = data.get('linkCV', member.linkCV)
             member.note = data.get('note', member.note)
             if 'school' in data:
@@ -1073,7 +1080,17 @@ def sse_events():
     response.headers['Connection'] = 'keep-alive'
     return response
 
-if __name__ == '__main__':
+def ensure_schema():
     with app.app_context():
         db.create_all()
+        try:
+            with db.engine.connect() as conn:
+                conn.execute(db.text("ALTER TABLE member ADD COLUMN sub_department_states TEXT DEFAULT '{}'"))
+                conn.commit()
+        except Exception:
+            pass
+
+ensure_schema()
+
+if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)

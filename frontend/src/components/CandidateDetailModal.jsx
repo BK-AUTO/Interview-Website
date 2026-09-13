@@ -296,7 +296,174 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members }) => {
 
           <Divider borderColor="gray.200" mb={5} />
 
-          {/* Section 2: Audit Logs Timeline */}
+          {/* Section 2: Dual Interview Flows (Main Department & Sub-Departments) */}
+          <Box mb={6}>
+            <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" letterSpacing="wider" color="gray.400" mb={3}>
+              Tiến trình 2 flow phỏng vấn độc lập
+            </Text>
+
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+              {/* Flow Mảng chính */}
+              <Box p={4} borderRadius="xl" bg="gray.50" borderWidth="1px" borderColor="gray.200">
+                <HStack justify="space-between" align="center" mb={2}>
+                  <HStack spacing={2}>
+                    <Badge colorScheme="primary" fontSize="xs" px={2} py={0.5} borderRadius="md">
+                      Mảng chính
+                    </Badge>
+                    <Text fontSize="sm" fontWeight="bold" color="gray.900">
+                      {DEPARTMENT_LABELS[liveCandidate.specialist] || liveCandidate.specialist || 'Chung'}
+                    </Text>
+                  </HStack>
+                </HStack>
+
+                <HStack spacing={2} mb={3} align="center">
+                  <Text fontSize="xs" color="gray.500">Trạng thái:</Text>
+                  <Badge
+                    fontSize="xs"
+                    px={2}
+                    py={0.5}
+                    borderRadius="md"
+                    borderWidth="1px"
+                    bg={stateProps.bg}
+                    color={stateProps.color}
+                    borderColor={stateProps.borderColor}
+                  >
+                    {liveCandidate.state}
+                  </Badge>
+                </HStack>
+
+                {/* Quick advance / state selection for Main Department */}
+                <Menu size="sm" isLazy>
+                  <MenuButton as={Button} size="xs" colorScheme="primary" variant="outline" w="full" rightIcon={<FaSyncAlt size={10} />}>
+                    Đổi trạng thái mảng chính
+                  </MenuButton>
+                  <MenuList fontSize="xs" zIndex={10}>
+                    {['Chờ duyệt', 'Đậu vòng đơn', 'Đã xác nhận', 'Đã checkin', 'Gọi PV', 'Đang phỏng vấn', 'Đã phỏng vấn', 'Trượt vòng đơn'].map((st) => (
+                      <MenuItem
+                        key={st}
+                        onClick={async () => {
+                          try {
+                            const res = await api.put(`/api/members/${liveCandidate.id}`, { state: st });
+                            if (setMembers) {
+                              setMembers((prev) => prev.map((m) => (m.id === liveCandidate.id ? res.data.member : m)));
+                            }
+                            toast({ title: `Mảng chính: ${st}`, status: 'info', duration: 2500, isClosable: true });
+                          } catch (err) {
+                            toast({ title: 'Lỗi cập nhật', description: err.message, status: 'error', duration: 3000, isClosable: true });
+                          }
+                        }}
+                        fontWeight={liveCandidate.state === st ? 'bold' : 'normal'}
+                        bg={liveCandidate.state === st ? 'primary.50' : 'transparent'}
+                        color={liveCandidate.state === st ? 'primary.600' : 'gray.800'}
+                      >
+                        {st}
+                      </MenuItem>
+                    ))}
+                  </MenuList>
+                </Menu>
+              </Box>
+
+              {/* Flow Các Mảng phụ */}
+              <Box p={4} borderRadius="xl" bg="gray.50" borderWidth="1px" borderColor="gray.200">
+                <HStack justify="space-between" align="center" mb={2}>
+                  <HStack spacing={2}>
+                    <Badge colorScheme="purple" fontSize="xs" px={2} py={0.5} borderRadius="md">
+                      Mảng phụ
+                    </Badge>
+                    <Text fontSize="sm" fontWeight="bold" color="gray.900">
+                      {subDepts.length > 0 ? `${subDepts.length} mảng đã đăng ký` : 'Không có'}
+                    </Text>
+                  </HStack>
+                </HStack>
+
+                {subDepts.length === 0 ? (
+                  <Text fontSize="xs" color="gray.400" fontStyle="italic" py={2}>
+                    Ứng viên không đăng ký mảng chuyên môn phụ nào.
+                  </Text>
+                ) : (
+                  <VStack spacing={2.5} align="stretch" mt={1}>
+                    {subDepts.map((sub) => {
+                      const subStates = parseSubDepartmentStates(liveCandidate.sub_department_states);
+                      const currentSubState = subStates[sub] || 'Chờ duyệt';
+                      const subStyle = SUB_DEPARTMENT_STATE_PROPS[currentSubState] || {
+                        bg: 'gray.100',
+                        color: 'gray.700',
+                        borderColor: 'gray.200',
+                      };
+
+                      return (
+                        <Flex
+                          key={sub}
+                          justify="space-between"
+                          align="center"
+                          p={2}
+                          borderRadius="md"
+                          bg="white"
+                          borderWidth="1px"
+                          borderColor="gray.200"
+                        >
+                          <Text fontSize="xs" fontWeight="semibold" color="gray.800">
+                            {DEPARTMENT_LABELS[sub] || sub}
+                          </Text>
+
+                          <Menu size="xs" isLazy>
+                            <MenuButton
+                              as={Button}
+                              size="xs"
+                              h="22px"
+                              px={2}
+                              fontSize="11px"
+                              bg={subStyle.bg}
+                              color={subStyle.color}
+                              borderWidth="1px"
+                              borderColor={subStyle.borderColor}
+                            >
+                              {currentSubState} ▾
+                            </MenuButton>
+                            <MenuList fontSize="xs" minW="130px" zIndex={10}>
+                              {SUB_DEPARTMENT_STATES.map((st) => (
+                                <MenuItem
+                                  key={st}
+                                  onClick={async () => {
+                                    const updated = { ...subStates, [sub]: st };
+                                    try {
+                                      const res = await api.put(`/api/members/${liveCandidate.id}`, {
+                                        sub_department_states: updated,
+                                      });
+                                      if (setMembers) {
+                                        setMembers((prev) => prev.map((m) => (m.id === liveCandidate.id ? res.data.member : m)));
+                                      }
+                                      toast({
+                                        title: `Mảng phụ [${DEPARTMENT_LABELS[sub] || sub}]: ${st}`,
+                                        status: 'success',
+                                        duration: 2500,
+                                        isClosable: true,
+                                      });
+                                    } catch (err) {
+                                      toast({ title: 'Lỗi cập nhật', description: err.message, status: 'error', duration: 3000, isClosable: true });
+                                    }
+                                  }}
+                                  fontWeight={currentSubState === st ? 'bold' : 'normal'}
+                                  bg={currentSubState === st ? 'primary.50' : 'transparent'}
+                                  color={currentSubState === st ? 'primary.600' : 'gray.800'}
+                                >
+                                  {st}
+                                </MenuItem>
+                              ))}
+                            </MenuList>
+                          </Menu>
+                        </Flex>
+                      );
+                    })}
+                  </VStack>
+                )}
+              </Box>
+            </SimpleGrid>
+          </Box>
+
+          <Divider borderColor="gray.200" mb={5} />
+
+          {/* Section 3: Audit Logs Timeline */}
           <Box>
             <Flex justify="space-between" align="center" mb={3}>
               <HStack spacing={2}>

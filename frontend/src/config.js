@@ -76,3 +76,48 @@ export const ACTOR_TYPE_LABELS = {
   candidate: 'Ứng viên',
   system: 'Hệ thống',
 };
+
+// Sub-department independent pipeline states
+export const SUB_DEPARTMENT_STATES = [
+  'Chờ duyệt',
+  'Đậu vòng đơn',
+  'Gọi PV',
+  'Đang phỏng vấn',
+  'Đã phỏng vấn',
+  'Đạt',
+  'Không đạt',
+];
+
+export const SUB_DEPARTMENT_STATE_PROPS = {
+  'Chờ duyệt': { bg: 'gray.100', color: 'gray.600', borderColor: 'gray.200', label: 'Chờ duyệt' },
+  'Đậu vòng đơn': { bg: 'rgba(24, 144, 255, 0.12)', color: 'info.600', borderColor: 'rgba(24, 144, 255, 0.3)', label: 'Đậu vòng đơn' },
+  'Trượt vòng đơn': { bg: 'rgba(245, 34, 45, 0.12)', color: 'danger.600', borderColor: 'rgba(245, 34, 45, 0.3)', label: 'Trượt vòng đơn' },
+  'Gọi PV': { bg: 'rgba(250, 173, 20, 0.15)', color: 'warning.700', borderColor: 'rgba(250, 173, 20, 0.35)', label: 'Gọi PV' },
+  'Đang phỏng vấn': { bg: 'rgba(114, 46, 209, 0.12)', color: 'secondary.600', borderColor: 'rgba(114, 46, 209, 0.35)', label: 'Đang PV' },
+  'Đã phỏng vấn': { bg: 'rgba(82, 196, 26, 0.15)', color: 'success.700', borderColor: 'rgba(82, 196, 26, 0.35)', label: 'Đã PV' },
+  'Đạt': { bg: 'rgba(58, 197, 105, 0.18)', color: 'primary.700', borderColor: 'rgba(58, 197, 105, 0.4)', label: 'Đạt' },
+  'Không đạt': { bg: 'rgba(245, 34, 45, 0.15)', color: 'danger.700', borderColor: 'rgba(245, 34, 45, 0.35)', label: 'Không đạt' },
+};
+
+export const parseSubDepartments = (sub) => {
+  if (!sub) return [];
+  if (Array.isArray(sub)) return sub;
+  try {
+    const parsed = JSON.parse(sub);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+export const parseSubDepartmentStates = (states) => {
+  if (!states) return {};
+  if (typeof states === 'object' && !Array.isArray(states)) return states;
+  try {
+    const parsed = JSON.parse(states);
+    return typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+

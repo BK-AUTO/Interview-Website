@@ -423,6 +423,7 @@ const ApplicationScreening = ({ members, setMembers }) => {
           onClose={() => setSelectedCandidate(null)}
           candidate={selectedCandidate}
           members={members}
+          setMembers={setMembers}
         />
       )}
     </Box>
