@@ -33,7 +33,7 @@ import {
 import api from '../api/axios';
 import ConfirmCredentialsModal from './ConfirmCredentialsModal';
 import CandidateDetailModal from './CandidateDetailModal';
-import { DEPARTMENT_LABELS, TRACK_LABELS } from '../config';
+import { DEPARTMENT_LABELS, TRACK_LABELS, parseSubDepartments } from '../config';
 import { openCandidateCV } from '../utils/cvCache';
 
 const ApplicationScreening = ({ members, setMembers }) => {
@@ -116,14 +116,7 @@ const ApplicationScreening = ({ members, setMembers }) => {
     openCandidateCV(member?.linkCV, toast);
   };
 
-  const parseSubDepartments = (raw) => {
-    try {
-      const parsed = JSON.parse(raw || '[]');
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  };
+
 
   return (
     <Box pb={8}>
