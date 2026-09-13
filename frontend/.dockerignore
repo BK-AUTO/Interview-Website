@@ -1,6 +1,8 @@
 node_modules
-npm-debug.log
+dist
 build
+.pnpm-store
+npm-debug.log
 .dockerignore
 Dockerfile
 .git
@@ -10,4 +12,4 @@ README.md
 .env.local
 .env.development.local
 .env.test.local
-.env.production.local 
+.env.production.local

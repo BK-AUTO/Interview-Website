@@ -23,7 +23,6 @@ import {
   useToast,
 } from '@chakra-ui/react';
 import {
-  FaUser,
   FaIdCard,
   FaPhoneAlt,
   FaEnvelope,
@@ -33,16 +32,9 @@ import {
   FaHistory,
   FaSyncAlt,
   FaExternalLinkAlt,
-  FaCheckCircle,
-  FaTimesCircle,
-  FaCalendarAlt,
-  FaEdit,
-  FaBullhorn,
-  FaMicrophoneAlt,
-  FaKey,
 } from 'react-icons/fa';
 import api from '../api/axios';
-import { DEPARTMENT_LABELS, TRACK_LABELS } from '../config';
+import { DEPARTMENT_LABELS, TRACK_LABELS, ACTION_ICONS, ACTION_COLORS } from '../config';
 
 const STATE_BADGE_PROPS = {
   'Chờ duyệt': { bg: 'gray.100', color: 'gray.600', borderColor: 'gray.200' },
@@ -55,37 +47,6 @@ const STATE_BADGE_PROPS = {
   'Gọi PV': { bg: 'rgba(250, 173, 20, 0.12)', color: 'warning.700', borderColor: 'rgba(250, 173, 20, 0.3)' },
   'Đang phỏng vấn': { bg: 'rgba(114, 46, 209, 0.12)', color: 'secondary.600', borderColor: 'rgba(114, 46, 209, 0.35)' },
   'Đã phỏng vấn': { bg: 'rgba(58, 197, 105, 0.12)', color: 'primary.600', borderColor: 'rgba(58, 197, 105, 0.3)' },
-};
-
-const ACTION_ICONS = {
-  'Nộp hồ sơ ứng tuyển': FaFilePdf,
-  'Thêm ứng viên': FaUser,
-  'Duyệt đậu vòng đơn': FaCheckCircle,
-  'Duyệt trượt vòng đơn': FaTimesCircle,
-  'Xác nhận tham gia phỏng vấn': FaCalendarAlt,
-  'Yêu cầu đổi lịch phỏng vấn': FaCalendarAlt,
-  'Tạo lại mật khẩu xác nhận': FaKey,
-  'Check-in tại sự kiện': FaCheckCircle,
-  'Gọi phỏng vấn': FaBullhorn,
-  'Bắt đầu phỏng vấn': FaMicrophoneAlt,
-  'Hoàn thành phỏng vấn': FaCheckCircle,
-  'Cập nhật thông tin': FaEdit,
-  'Chuyển trạng thái': FaEdit,
-  'Xoá ứng viên': FaTimesCircle,
-};
-
-const ACTION_COLORS = {
-  'Nộp hồ sơ ứng tuyển': { bg: 'rgba(24, 144, 255, 0.12)', color: 'info.600', border: 'rgba(24, 144, 255, 0.3)' },
-  'Duyệt đậu vòng đơn': { bg: 'rgba(58, 197, 105, 0.12)', color: 'primary.600', border: 'rgba(58, 197, 105, 0.3)' },
-  'Duyệt trượt vòng đơn': { bg: 'rgba(245, 34, 45, 0.12)', color: 'danger.600', border: 'rgba(245, 34, 45, 0.3)' },
-  'Xác nhận tham gia phỏng vấn': { bg: 'rgba(82, 196, 26, 0.12)', color: 'success.700', border: 'rgba(82, 196, 26, 0.3)' },
-  'Yêu cầu đổi lịch phỏng vấn': { bg: 'rgba(250, 173, 20, 0.12)', color: 'warning.700', border: 'rgba(250, 173, 20, 0.3)' },
-  'Tạo lại mật khẩu xác nhận': { bg: 'rgba(250, 173, 20, 0.12)', color: 'warning.700', border: 'rgba(250, 173, 20, 0.3)' },
-  'Check-in tại sự kiện': { bg: 'rgba(82, 196, 26, 0.12)', color: 'success.700', border: 'rgba(82, 196, 26, 0.3)' },
-  'Gọi phỏng vấn': { bg: 'rgba(250, 173, 20, 0.12)', color: 'warning.700', border: 'rgba(250, 173, 20, 0.3)' },
-  'Bắt đầu phỏng vấn': { bg: 'rgba(114, 46, 209, 0.12)', color: 'secondary.600', border: 'rgba(114, 46, 209, 0.35)' },
-  'Hoàn thành phỏng vấn': { bg: 'rgba(58, 197, 105, 0.12)', color: 'primary.600', border: 'rgba(58, 197, 105, 0.3)' },
-  'Cập nhật thông tin': { bg: 'gray.100', color: 'gray.600', border: 'gray.200' },
 };
 
 const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {

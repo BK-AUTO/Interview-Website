@@ -25,6 +25,7 @@ import WebsiteManagement from './components/WebsiteManagement';
 import InterviewTracker from './components/InterviewTracker';
 import ApplicationScreening from './components/ApplicationScreening';
 import ApprovedCandidates from './components/ApprovedCandidates';
+import AuditLogHistory from './components/AuditLogHistory';
 import Checkin from './components/Checkin';
 import CheckinQr from './components/CheckinQr';
 import api from './api/axios';
@@ -36,6 +37,7 @@ const TAB_TITLES = [
   { title: 'Ứng viên đã duyệt', subtitle: 'Quản lý link xác nhận và mật khẩu phỏng vấn' },
   { title: 'Quản lý ứng viên', subtitle: 'Danh sách và điều phối luồng phỏng vấn trực tiếp' },
   { title: 'Bảng theo dõi phỏng vấn', subtitle: 'Trực quan hoá trạng thái các phòng phỏng vấn' },
+  { title: 'Lịch sử thao tác', subtitle: 'Nhật ký toàn hệ thống, giữ lại cả hồ sơ đã bị xoá' },
   { title: 'Cấu hình & Website', subtitle: 'Thông số hệ thống và liên kết dịch vụ' },
 ];
 
@@ -424,6 +426,9 @@ function App() {
               </TabPanel>
               <TabPanel p={0}>
                 <InterviewTracker members={members} />
+              </TabPanel>
+              <TabPanel p={0}>
+                <AuditLogHistory />
               </TabPanel>
               <TabPanel p={0}>
                 <WebsiteManagement setActiveTab={setActiveTab} />

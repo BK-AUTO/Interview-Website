@@ -22,6 +22,7 @@ import {
   FaUserCheck,
   FaQrcode,
   FaCheckCircle,
+  FaHistory,
 } from 'react-icons/fa';
 import { IoLogOutOutline } from 'react-icons/io5';
 
@@ -30,7 +31,8 @@ const NAV_ITEMS = [
   { index: 1, icon: FaUserCheck, label: 'Ứng viên đã duyệt' },
   { index: 2, icon: FaUsers, label: 'Quản lý ứng viên', badgeKey: 'total' },
   { index: 3, icon: FaChartBar, label: 'Bảng theo dõi PV', badgeKey: 'interviewing' },
-  { index: 4, icon: SettingsIcon, label: 'Cấu hình & Website' },
+  { index: 4, icon: FaHistory, label: 'Lịch sử thao tác' },
+  { index: 5, icon: SettingsIcon, label: 'Cấu hình & Website' },
 ];
 
 const Sidebar = ({

@@ -22,7 +22,12 @@ from flask_limiter.util import get_remote_address
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'secret!')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///new.db'
+raw_db_uri = os.environ.get('DATABASE_URL') or os.environ.get('DATABASE_URI') or 'sqlite:///new.db'
+if raw_db_uri.startswith('postgres://'):
+    raw_db_uri = raw_db_uri.replace('postgres://', 'postgresql://', 1)
+elif raw_db_uri.startswith('sqlite:///instance/'):
+    raw_db_uri = raw_db_uri.replace('sqlite:///instance/', 'sqlite:///', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = raw_db_uri
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'connect_args': {'check_same_thread': False}
 }
@@ -111,7 +116,7 @@ def generate_confirm_password():
 class Member(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    MSSV = db.Column(db.String(20), nullable=False, unique=True)  # Increased size for MSSV
+    MSSV = db.Column(db.String(100), nullable=False, unique=True)  # Increased size for MSSV / external key
     email = db.Column(db.String(100))
     phone = db.Column(db.String(20))
     specialist = db.Column(db.String(100))
@@ -124,6 +129,7 @@ class Member(db.Model):
     note = db.Column(db.String(500), nullable=True)  # New field for notes
     school = db.Column(db.String(200), nullable=True)
     application_track = db.Column(db.String(20), default='engineering')
+    is_deleted = db.Column(db.Boolean, default=False, nullable=False)
     # Interview participation confirmation portal (/confirm/<token>).
     confirm_token = db.Column(db.String(64), unique=True, nullable=True)
     confirm_password_hash = db.Column(db.String(200), nullable=True)
@@ -153,12 +159,22 @@ def member_to_dict(member):
         'confirm_token': member.confirm_token,
         'confirm_url': f"{FRONTEND_URL}/confirm/{member.confirm_token}" if member.confirm_token else None,
         'reschedule_request': member.reschedule_request,
-        'confirmed_at': member.confirmed_at
+        'confirmed_at': member.confirmed_at,
+        'is_deleted': bool(member.is_deleted)
     }
 
 class AuditLog(db.Model):
+    # Audit trail is intentionally append-only and must outlive the Member it
+    # is about: ondelete='SET NULL' (not CASCADE) means deleting a candidate
+    # NEVER deletes their history, it only detaches the FK. member_*_snapshot
+    # is a denormalized copy of the candidate's identity taken at the moment
+    # each log line is written, so the row stays human-readable forever even
+    # after member_id goes NULL — a bare orphaned id would otherwise be
+    # useless for anyone auditing who a deleted candidate was.
     id = db.Column(db.Integer, primary_key=True)
-    member_id = db.Column(db.Integer, db.ForeignKey('member.id', ondelete='CASCADE'), nullable=True, index=True)
+    member_id = db.Column(db.Integer, db.ForeignKey('member.id', ondelete='SET NULL'), nullable=True, index=True)
+    member_name_snapshot = db.Column(db.String(100), nullable=True)
+    member_mssv_snapshot = db.Column(db.String(200), nullable=True)
     actor_username = db.Column(db.String(100), nullable=True) # e.g. duc.na238345
     actor_name = db.Column(db.String(100), nullable=True)     # e.g. Nguyễn Anh Đức
     actor_email = db.Column(db.String(100), nullable=True)    # e.g. duc.na238345@sis.hust.edu.vn
@@ -171,6 +187,8 @@ class AuditLog(db.Model):
         return {
             'id': self.id,
             'member_id': self.member_id,
+            'member_name_snapshot': self.member_name_snapshot,
+            'member_mssv_snapshot': self.member_mssv_snapshot,
             'actor_username': self.actor_username,
             'actor_name': self.actor_name,
             'actor_email': self.actor_email,
@@ -196,15 +214,25 @@ def get_current_actor():
     except Exception:
         return {'username': 'Admin', 'name': 'Ban Quản Trị', 'email': ''}
 
-def record_audit_log(member_id, action, details=None, actor=None, actor_type='admin'):
+def record_audit_log(member_id, action, details=None, actor=None, actor_type='admin',
+                      member_name=None, member_mssv=None):
+    """Always call this with the subject candidate's current name/MSSV in
+    member_name/member_mssv when a Member row is in scope — it is snapshotted
+    onto the log row so the entry stays attributable even after the member
+    is edited (name/MSSV changed) or deleted (member_id set to NULL, see
+    AuditLog.member_id ondelete='SET NULL'). This function must never let a
+    logging failure abort the caller's already-committed change to Member —
+    hence the broad except that only logs, never re-raises."""
     try:
         if actor is None and actor_type == 'admin':
             actor = get_current_actor()
         elif actor is None:
             actor = {'username': 'Ứng viên', 'name': 'Ứng viên', 'email': ''}
-        
+
         log = AuditLog(
             member_id=member_id,
+            member_name_snapshot=member_name,
+            member_mssv_snapshot=member_mssv,
             actor_username=actor.get('username'),
             actor_name=actor.get('name'),
             actor_email=actor.get('email'),
@@ -216,6 +244,7 @@ def record_audit_log(member_id, action, details=None, actor=None, actor_type='ad
         db.session.add(log)
         db.session.commit()
     except Exception as e:
+        db.session.rollback()
         logging.error(f"Error recording audit log: {e}")
 
 class User(db.Model):
@@ -224,6 +253,10 @@ class User(db.Model):
     password = db.Column(db.String(200), nullable=False)
     MSSV = db.Column(db.String(20), db.ForeignKey('member.MSSV'), nullable=False)
     member = db.relationship('Member', backref=db.backref('user', lazy=True))
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({'status': 'ok', 'service': 'interview-backend'}), 200
 
 @app.route('/api/register', methods=['POST'])
 def register():
@@ -316,7 +349,7 @@ def auth_me():
 @jwt_required()
 def get_members():
     try:
-        members = Member.query.all()
+        members = Member.query.filter_by(is_deleted=False).all()
         return jsonify([member_to_dict(member) for member in members])
     except Exception as e:
         logging.error(f"Error getting members: {e}")
@@ -350,7 +383,9 @@ def add_member():
             member_id=new_member.id,
             action='Thêm ứng viên',
             details=f"Thêm thủ công ứng viên {new_member.name} ({new_member.specialist or 'Chưa phân mảng'})",
-            actor_type='admin'
+            actor_type='admin',
+            member_name=new_member.name,
+            member_mssv=new_member.MSSV
         )
 
         member_data = member_to_dict(new_member)
@@ -358,6 +393,7 @@ def add_member():
         logging.info(f"Member added: {new_member.name}")
         return jsonify({'message': 'Member added successfully', 'member': member_data}), 201
     except Exception as e:
+        db.session.rollback()
         logging.error(f"Error adding member: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -381,6 +417,10 @@ def edit_member(id):
             member.sub_departments = data.get('sub_departments', member.sub_departments)
             member.linkCV = data.get('linkCV', member.linkCV)
             member.note = data.get('note', member.note)
+            if 'school' in data:
+                member.school = data.get('school', member.school)
+            if 'application_track' in data:
+                member.application_track = data.get('application_track', member.application_track)
 
             # Check for state change
             if 'state' in data:
@@ -428,7 +468,9 @@ def edit_member(id):
                 member_id=member.id,
                 action=action_name,
                 details=details_text,
-                actor_type='admin'
+                actor_type='admin',
+                member_name=member.name,
+                member_mssv=member.MSSV
             )
 
             member_data = member_to_dict(member)
@@ -461,6 +503,7 @@ def edit_member(id):
         else:
             return jsonify({'message': 'Member not found'}), 404
     except Exception as e:
+        db.session.rollback()
         logging.error(f"Error editing member: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -484,7 +527,9 @@ def reset_confirmation(id):
             member_id=member.id,
             action='Tạo lại mật khẩu xác nhận',
             details='Admin tạo lại mã xác nhận và đường link mới (link cũ bị vô hiệu hoá)',
-            actor_type='admin'
+            actor_type='admin',
+            member_name=member.name,
+            member_mssv=member.MSSV
         )
 
         member_data = member_to_dict(member)
@@ -495,6 +540,7 @@ def reset_confirmation(id):
             'confirm_password': new_plaintext_password
         })
     except Exception as e:
+        db.session.rollback()
         logging.error(f"Error resetting confirmation: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -503,21 +549,28 @@ def reset_confirmation(id):
 def delete_member(id):
     try:
         member = Member.query.get(id)
-        if member:
+        if member and not member.is_deleted:
+            # SOFT DELETE: Mark is_deleted=True. NEVER physically remove the candidate record from the DB.
+            # All applicant data, contact details, CV link, and audit logs are retained permanently.
             record_audit_log(
                 member_id=member.id,
                 action='Xoá ứng viên',
-                details=f"Xoá hồ sơ ứng viên {member.name} ({member.MSSV})",
-                actor_type='admin'
+                details=f"Xoá hồ sơ ứng viên {member.name} ({member.MSSV}) (Đã đánh dấu xoá, bản ghi được lưu trữ an toàn vĩnh viễn trong CSDL)",
+                actor_type='admin',
+                member_name=member.name,
+                member_mssv=member.MSSV
             )
-            db.session.delete(member)
+            member.is_deleted = True
             db.session.commit()
             socketio.emit('member_deleted', {'id': id})
-            logging.info(f"Member deleted: {member.name}")
+            logging.info(f"Member soft-deleted (DB record preserved): {member.name} ({member.MSSV})")
             return jsonify({'message': 'Member deleted successfully'})
+        elif member and member.is_deleted:
+            return jsonify({'message': 'Member already deleted'}), 400
         else:
             return jsonify({'message': 'Member not found'}), 404
     except Exception as e:
+        db.session.rollback()
         logging.error(f"Error deleting member: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -531,6 +584,22 @@ def get_member_audit_logs(id):
         logging.error(f"Error getting audit logs: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/audit-logs', methods=['GET'])
+@jwt_required()
+def get_all_audit_logs():
+    """Full audit trail across every candidate, including ones since deleted
+    (member_id NULL — identified via member_name_snapshot/member_mssv_snapshot
+    instead). This is the only way to review history for a deleted candidate,
+    since /api/members/<id>/audit-logs requires an id that no longer resolves
+    to anything once the Member row is gone."""
+    try:
+        limit = request.args.get('limit', type=int) or 500
+        logs = AuditLog.query.order_by(AuditLog.id.desc()).limit(min(limit, 2000)).all()
+        return jsonify([log.to_dict() for log in logs])
+    except Exception as e:
+        logging.error(f"Error getting all audit logs: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/checkin', methods=['POST'])
 # Remove the @jwt_required() decorator
 def checkin_member():
@@ -539,7 +608,7 @@ def checkin_member():
         uid = data.get('uid')  # uid có thể là MSSV hoặc ID khác
 
         # Try to find member by MSSV
-        member = Member.query.filter_by(MSSV=uid).first()
+        member = Member.query.filter_by(MSSV=uid, is_deleted=False).first()
 
         if member:
             if member.state not in CHECKIN_ELIGIBLE_STATES:
@@ -558,7 +627,9 @@ def checkin_member():
                 action='Check-in tại sự kiện',
                 details=f"Check-in thành công lúc {current_time}",
                 actor={'username': member.MSSV, 'name': member.name, 'email': member.email},
-                actor_type='candidate'
+                actor_type='candidate',
+                member_name=member.name,
+                member_mssv=member.MSSV
             )
 
             member_data = member_to_dict(member)
@@ -570,6 +641,7 @@ def checkin_member():
             logging.warning(f"Member not found with uid: {uid}")
             return jsonify({'message': 'Member not found'}), 404
     except Exception as e:
+        db.session.rollback()
         logging.error(f"Error checking in member: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -579,7 +651,7 @@ def checkin_member_esp():
     try:
         data = request.get_json()
         mssv = data.get('MSSV')  # Changed from IDcard to MSSV
-        member = Member.query.filter_by(MSSV=mssv).first()
+        member = Member.query.filter_by(MSSV=mssv, is_deleted=False).first()
         if member:
             if member.state not in CHECKIN_ELIGIBLE_STATES:
                 logging.warning(f"Member {member.name} cannot check in from state '{member.state}' (ESP)")
@@ -596,7 +668,9 @@ def checkin_member_esp():
                 action='Check-in tại sự kiện',
                 details=f"Check-in (thiết bị kiosk ESP) lúc {current_time}",
                 actor={'username': member.MSSV, 'name': member.name, 'email': member.email},
-                actor_type='candidate'
+                actor_type='candidate',
+                member_name=member.name,
+                member_mssv=member.MSSV
             )
 
             member_data = member_to_dict(member)
@@ -606,6 +680,7 @@ def checkin_member_esp():
         else:
             return jsonify({'message': 'Member not found'}), 404
     except Exception as e:
+        db.session.rollback()
         logging.error(f"Error checking in member (ESP): {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -688,7 +763,7 @@ def apply():
         dup = Member.query.filter(
             or_(Member.email == email, Member.MSSV == mssv_key)
         ).first()
-        if dup:
+        if dup and not dup.is_deleted:
             return jsonify({'message': 'Bạn đã nộp đơn rồi'}), 409
 
         link_cv = None
@@ -705,6 +780,43 @@ def apply():
             cv_file.save(os.path.join(UPLOAD_FOLDER, stored_name))
             link_cv = f"/api/uploads/cv/{stored_name}"
 
+        track_label = TRACK_LABELS.get(application_track, application_track)
+
+        if dup and dup.is_deleted:
+            # Candidate was previously soft-deleted; reactivate & update their record
+            dup.is_deleted = False
+            dup.name = full_name
+            dup.MSSV = mssv_key
+            dup.email = email
+            dup.phone = phone
+            dup.specialist = main_department
+            dup.major_class = major_class
+            dup.student_type = student_type
+            dup.school = school
+            dup.application_track = application_track
+            dup.sub_departments = sub_departments
+            if link_cv:
+                dup.linkCV = link_cv
+            dup.state = 'Chờ duyệt'
+            dup.note = questions
+            db.session.commit()
+
+            dept_label = DEPARTMENT_LABELS.get(dup.specialist, dup.specialist)
+            record_audit_log(
+                member_id=dup.id,
+                action='Nộp lại hồ sơ ứng tuyển',
+                details=f"Ứng viên nộp lại hồ sơ {track_label} - mảng {dept_label} (sau khi được khôi phục hồ sơ đã xoá)",
+                actor={'username': dup.MSSV, 'name': dup.name, 'email': dup.email},
+                actor_type='candidate',
+                member_name=dup.name,
+                member_mssv=dup.MSSV
+            )
+
+            member_data = member_to_dict(dup)
+            socketio.emit('member_added', member_data)
+            logging.info(f"Re-application received for reactivated member: {dup.name} ({dup.MSSV})")
+            return jsonify({'message': 'Nộp đơn thành công', 'member': member_data}), 201
+
         new_member = Member(
             name=full_name,
             MSSV=mssv_key,
@@ -718,19 +830,21 @@ def apply():
             sub_departments=sub_departments,
             linkCV=link_cv,
             state='Chờ duyệt',
-            note=questions
+            note=questions,
+            is_deleted=False
         )
         db.session.add(new_member)
         db.session.commit()
 
-        track_label = TRACK_LABELS.get(application_track, application_track)
         dept_label = DEPARTMENT_LABELS.get(new_member.specialist, new_member.specialist)
         record_audit_log(
             member_id=new_member.id,
             action='Nộp hồ sơ ứng tuyển',
             details=f"Ứng viên nộp hồ sơ {track_label} - mảng {dept_label}",
             actor={'username': new_member.MSSV, 'name': new_member.name, 'email': new_member.email},
-            actor_type='candidate'
+            actor_type='candidate',
+            member_name=new_member.name,
+            member_mssv=new_member.MSSV
         )
 
         member_data = member_to_dict(new_member)
@@ -741,6 +855,7 @@ def apply():
         db.session.rollback()
         return jsonify({'message': 'Bạn đã nộp đơn rồi'}), 409
     except Exception as e:
+        db.session.rollback()
         logging.error(f"Error receiving application: {e}")
         return jsonify({'message': f'Có lỗi xảy ra trên hệ thống: {str(e)}', 'error': str(e)}), 500
 
@@ -804,7 +919,9 @@ def confirm_participation(token):
         action='Xác nhận tham gia phỏng vấn',
         details='Ứng viên tự xác nhận tham gia buổi phỏng vấn qua link và mật khẩu bảo mật',
         actor={'username': member.MSSV, 'name': member.name, 'email': member.email},
-        actor_type='candidate'
+        actor_type='candidate',
+        member_name=member.name,
+        member_mssv=member.MSSV
     )
 
     member_data = member_to_dict(member)
@@ -836,7 +953,9 @@ def confirm_reschedule(token):
         action='Yêu cầu đổi lịch phỏng vấn',
         details=f"Lý do / thời gian mong muốn: {reason}",
         actor={'username': member.MSSV, 'name': member.name, 'email': member.email},
-        actor_type='candidate'
+        actor_type='candidate',
+        member_name=member.name,
+        member_mssv=member.MSSV
     )
 
     member_data = member_to_dict(member)
@@ -849,7 +968,7 @@ def handle_connect():
     try:
         logging.info("Client connected to SocketIO")
         with app.app_context():
-            members = Member.query.all()
+            members = Member.query.filter_by(is_deleted=False).all()
             member_list = [member_to_dict(member) for member in members]
             logging.info(f"Sending members list: {len(member_list)} members")
             emit('members_list', member_list)
@@ -862,7 +981,7 @@ def handle_connect():
 def handle_update_request():
     try:
         with app.app_context():
-            members = Member.query.all()
+            members = Member.query.filter_by(is_deleted=False).all()
             member_list = [member_to_dict(member) for member in members]
             emit('members_list', member_list)
     except Exception as e:
