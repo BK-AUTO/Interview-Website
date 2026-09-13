@@ -85,6 +85,39 @@ MAX_CV_SIZE_BYTES = 5 * 1024 * 1024  # 5MB, matches the limit enforced in Recrui
 
 db = SQLAlchemy(app)
 
+APPLICATION_TRACKS = ('engineering', 'media')
+TRACK_MAIN_DEPARTMENTS = {
+    'engineering': {'ai', 'electrical', 'simulation', 'experiment'},
+    'media': {'communication'},
+}
+SUB_DEPARTMENTS = {'communication', 'english', 'manufacturing', 'event'}
+DEPARTMENT_LABELS = {
+    'ai': 'AI for Automobile', 'electrical': 'Điện - Điện tử',
+    'simulation': 'Mô phỏng', 'experiment': 'Thí nghiệm',
+    'communication': 'Truyền thông', 'english': 'Tiếng Anh',
+    'manufacturing': 'Cơ khí', 'event': 'Sự kiện',
+}
+TRACK_LABELS = {
+    'engineering': 'Kỹ thuật',
+    'media': 'Truyền thông',
+}
+
+# Main state pipeline levels for sequential gating
+MAIN_STATE_LEVELS = {
+    'Chờ duyệt': 0,
+    'Trượt vòng đơn': 0,
+    'Đậu vòng đơn': 1,
+    'Xin đổi lịch': 1,
+    'Đã xác nhận': 2,
+    'Đã checkin': 3,
+    'Gọi PV': 4,
+    'Đang phỏng vấn': 5,
+    'Đã phỏng vấn': 6,
+}
+SUB_SCREENING_STATES = {'Chờ duyệt', 'Đậu vòng đơn', 'Trượt vòng đơn'}
+SUB_INTERVIEW_STATES = {'Gọi PV', 'Đang phỏng vấn', 'Đã phỏng vấn', 'Đạt', 'Không đạt'}
+
+
 # --- High-Performance SQLite PRAGMAs (WAL Mode, Cache, Temp in RAM) ---
 @event.listens_for(Engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
@@ -493,6 +526,10 @@ def edit_member(id):
             previous_state = member.state  # Store previous state to check for transitions
             prev_sub_states = member.sub_department_states
 
+            # Determine target state for main department
+            target_main_state = data.get('state', member.state)
+            main_level = MAIN_STATE_LEVELS.get(target_main_state, 0)
+
             # Update member data
             member.name = data.get('name', member.name)
             member.MSSV = data.get('MSSV', member.MSSV)
@@ -502,9 +539,48 @@ def edit_member(id):
             member.major_class = data.get('major_class', member.major_class)
             member.student_type = data.get('student_type', member.student_type)
             member.sub_departments = data.get('sub_departments', member.sub_departments)
+
             if 'sub_department_states' in data:
                 sub_val = data['sub_department_states']
-                member.sub_department_states = json.dumps(sub_val) if isinstance(sub_val, dict) else str(sub_val)
+                if isinstance(sub_val, str):
+                    try:
+                        parsed_sub_val = json.loads(sub_val)
+                    except Exception:
+                        return jsonify({'error': 'Dữ liệu mảng phụ không đúng định dạng JSON'}), 400
+                elif isinstance(sub_val, dict):
+                    parsed_sub_val = sub_val
+                else:
+                    return jsonify({'error': 'Dữ liệu mảng phụ không hợp lệ'}), 400
+
+                # Existing states
+                existing_sub_states = {}
+                if member.sub_department_states:
+                    try:
+                        existing_sub_states = json.loads(member.sub_department_states) if isinstance(member.sub_department_states, str) else member.sub_department_states
+                        if not isinstance(existing_sub_states, dict):
+                            existing_sub_states = {}
+                    except Exception:
+                        existing_sub_states = {}
+
+                # Gate validation
+                for dept_key, new_st in parsed_sub_val.items():
+                    old_st = existing_sub_states.get(dept_key, 'Chờ duyệt')
+                    if new_st != old_st:
+                        dept_name = DEPARTMENT_LABELS.get(dept_key, dept_key)
+                        # Gate 1: Main department must be at least 'Đậu vòng đơn' (main_level >= 1)
+                        if main_level < 1 and new_st != 'Chờ duyệt':
+                            return jsonify({
+                                'error': f"Không thể cập nhật mảng phụ '{dept_name}' ({new_st}): mảng chính chưa đậu vòng đơn (trạng thái: {target_main_state})"
+                            }), 400
+
+                        # Gate 2: Sub-dept interview states require main to be 'Đã phỏng vấn' (main_level >= 6)
+                        if new_st in SUB_INTERVIEW_STATES and main_level < 6:
+                            return jsonify({
+                                'error': f"Không thể phỏng vấn mảng phụ '{dept_name}': mảng chính chưa hoàn thành phỏng vấn (trạng thái: {target_main_state})"
+                            }), 400
+
+                member.sub_department_states = json.dumps(parsed_sub_val)
+
             member.linkCV = data.get('linkCV', member.linkCV)
             member.note = data.get('note', member.note)
             if 'school' in data:
@@ -515,6 +591,30 @@ def edit_member(id):
             # Check for state change
             if 'state' in data:
                 member.state = data['state']
+
+            # Auto-initialize sub_department_states for registered sub_departments when passing screening
+            if member.state == 'Đậu vòng đơn':
+                if member.sub_departments:
+                    try:
+                        sub_list = json.loads(member.sub_departments) if isinstance(member.sub_departments, str) else member.sub_departments
+                        if isinstance(sub_list, list) and sub_list:
+                            current_states = {}
+                            if member.sub_department_states:
+                                try:
+                                    current_states = json.loads(member.sub_department_states) if isinstance(member.sub_department_states, str) else member.sub_department_states
+                                    if not isinstance(current_states, dict):
+                                        current_states = {}
+                                except Exception:
+                                    current_states = {}
+                            needs_update = False
+                            for sd in sub_list:
+                                if sd not in current_states:
+                                    current_states[sd] = 'Chờ duyệt'
+                                    needs_update = True
+                            if needs_update:
+                                member.sub_department_states = json.dumps(current_states)
+                    except Exception as e:
+                        logging.warning(f"Error auto-initializing sub_department_states: {e}")
 
             # First time this candidate passes screening: mint their
             # confirmation link + one-time password. Re-approving later
@@ -550,6 +650,19 @@ def edit_member(id):
                 else:
                     action_name = 'Chuyển trạng thái'
                     details_text = f"Chuyển trạng thái từ '{previous_state}' sang '{member.state}'"
+            elif member.sub_department_states != prev_sub_states:
+                action_name = 'Chuyển trạng thái'
+                try:
+                    p_sub = json.loads(prev_sub_states) if prev_sub_states else {}
+                    n_sub = json.loads(member.sub_department_states) if member.sub_department_states else {}
+                    changes = []
+                    for k, v in n_sub.items():
+                        if p_sub.get(k) != v:
+                            d_name = DEPARTMENT_LABELS.get(k, k)
+                            changes.append(f"{d_name}: {p_sub.get(k, 'Chưa có')} -> {v}")
+                    details_text = f"Cập nhật mảng phụ: {', '.join(changes)}"
+                except Exception:
+                    details_text = 'Cập nhật trạng thái mảng phụ'
             else:
                 action_name = 'Cập nhật thông tin'
                 details_text = 'Chỉnh sửa thông tin chi tiết hồ sơ ứng viên'
@@ -774,22 +887,7 @@ def checkin_member_esp():
         logging.error(f"Error checking in member (ESP): {e}")
         return jsonify({'error': str(e)}), 500
 
-APPLICATION_TRACKS = ('engineering', 'media')
-TRACK_MAIN_DEPARTMENTS = {
-    'engineering': {'ai', 'electrical', 'simulation', 'experiment'},
-    'media': {'communication'},
-}
-SUB_DEPARTMENTS = {'communication', 'english', 'manufacturing', 'event'}
-DEPARTMENT_LABELS = {
-    'ai': 'AI for Automobile', 'electrical': 'Điện - Điện tử',
-    'simulation': 'Mô phỏng', 'experiment': 'Thí nghiệm',
-    'communication': 'Truyền thông', 'english': 'Tiếng Anh',
-    'manufacturing': 'Cơ khí', 'event': 'Sự kiện',
-}
-TRACK_LABELS = {
-    'engineering': 'Kỹ thuật',
-    'media': 'Truyền thông',
-}
+
 
 HUST_EMAIL_RE = re.compile(r'^[^@\s]+@(sis\.)?hust\.edu\.vn$', re.IGNORECASE)
 

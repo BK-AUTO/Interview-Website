@@ -81,6 +81,7 @@ export const ACTOR_TYPE_LABELS = {
 export const SUB_DEPARTMENT_STATES = [
   'Chờ duyệt',
   'Đậu vòng đơn',
+  'Trượt vòng đơn',
   'Gọi PV',
   'Đang phỏng vấn',
   'Đã phỏng vấn',
@@ -120,4 +121,59 @@ export const parseSubDepartmentStates = (states) => {
     return {};
   }
 };
+
+// Main state pipeline order (numerical index for sequential gate comparison)
+export const MAIN_STATE_ORDER = {
+  'Chờ duyệt': 0,
+  'Trượt vòng đơn': 0,
+  'Đậu vòng đơn': 1,
+  'Xin đổi lịch': 1,
+  'Đã xác nhận': 2,
+  'Đã checkin': 3,
+  'Gọi PV': 4,
+  'Đang phỏng vấn': 5,
+  'Đã phỏng vấn': 6,
+};
+
+// Sub-dept screening states (Gate 1): unlocked when main >= 'Đậu vòng đơn'
+export const SUB_SCREENING_STATES = ['Chờ duyệt', 'Đậu vòng đơn', 'Trượt vòng đơn'];
+
+// Sub-dept interview states (Gate 2): unlocked when main = 'Đã phỏng vấn'
+export const SUB_INTERVIEW_STATES = ['Gọi PV', 'Đang phỏng vấn', 'Đã phỏng vấn', 'Đạt', 'Không đạt'];
+
+/**
+ * Checks whether sub-department flow is completely locked (Gate 1: main must be at least 'Đậu vòng đơn')
+ */
+export function isSubDeptLocked(mainState) {
+  return (MAIN_STATE_ORDER[mainState] ?? 0) < 1;
+}
+
+/**
+ * Checks whether sub-department interview states are locked (Gate 2: main must be at least 'Đã phỏng vấn')
+ */
+export function isSubDeptInterviewLocked(mainState) {
+  return (MAIN_STATE_ORDER[mainState] ?? 0) < 6;
+}
+
+/**
+ * Returns allowed sub-department states based on candidate's main state and sub-dept's current state.
+ */
+export function getSubDeptAllowedStates(mainState, currentSubState = 'Chờ duyệt') {
+  const mainLevel = MAIN_STATE_ORDER[mainState] ?? 0;
+  // Gate 1: main < Đậu vòng đơn -> entirely locked
+  if (mainLevel < 1) {
+    return [];
+  }
+  // If sub-dept failed screening, it cannot advance to interview
+  if (currentSubState === 'Trượt vòng đơn') {
+    return SUB_SCREENING_STATES;
+  }
+  // Gate 2: main reached Đã phỏng vấn -> interview states unlocked
+  if (mainLevel >= 6) {
+    return [...SUB_SCREENING_STATES, ...SUB_INTERVIEW_STATES];
+  }
+  // Main >= Đậu vòng đơn but < Đã phỏng vấn: only screening states allowed
+  return SUB_SCREENING_STATES;
+}
+
 
