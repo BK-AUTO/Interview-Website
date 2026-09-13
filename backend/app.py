@@ -17,10 +17,45 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, get_jwt
 from authlib.integrations.flask_client import OAuth
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 
 app = Flask(__name__)
+
+class ReverseProxyFix:
+    """WSGI middleware to extract the real visitor IP behind Cloudflare and Nginx Proxy Manager.
+    Sets environ['REMOTE_ADDR'] so that Werkzeug access logging and request.remote_addr
+    accurately reflect the client's public IP instead of the internal Docker/proxy IP.
+    """
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
+
+    def __call__(self, environ, start_response):
+        # 1. Cloudflare sends real client IP in CF-Connecting-IP
+        cf_ip = environ.get('HTTP_CF_CONNECTING_IP')
+        if cf_ip:
+            environ['REMOTE_ADDR'] = cf_ip.strip()
+        # 2. Nginx Proxy Manager / standard reverse proxy sends X-Real-IP
+        elif environ.get('HTTP_X_REAL_IP'):
+            environ['REMOTE_ADDR'] = environ['HTTP_X_REAL_IP'].strip()
+        # 3. X-Forwarded-For (the leftmost IP is the original client)
+        elif environ.get('HTTP_X_FORWARDED_FOR'):
+            client_ip = environ['HTTP_X_FORWARDED_FOR'].split(',')[0].strip()
+            if client_ip:
+                environ['REMOTE_ADDR'] = client_ip
+
+        # Preserve https protocol when terminated at reverse proxy
+        proto = environ.get('HTTP_X_FORWARDED_PROTO')
+        if proto:
+            environ['wsgi.url_scheme'] = proto.strip()
+
+        # Preserve original host
+        host = environ.get('HTTP_X_FORWARDED_HOST')
+        if host:
+            environ['HTTP_HOST'] = host.strip()
+
+        return self.wsgi_app(environ, start_response)
+
+app.wsgi_app = ReverseProxyFix(app.wsgi_app)
+
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'secret!')
 raw_db_uri = os.environ.get('DATABASE_URL') or os.environ.get('DATABASE_URI') or 'sqlite:///new.db'
 if raw_db_uri.startswith('postgres://'):
@@ -57,8 +92,6 @@ CORS(app, resources={
     r"/api/*": {"origins": "*"},
 }, supports_credentials=True)
 jwt = JWTManager(app)
-
-limiter = Limiter(key_func=get_remote_address, app=app, default_limits=[])
 
 # Authentik SSO (OIDC). Access to this app is controlled by policy bindings
 # on the Authentik side, not by role checks here — anyone who completes login
@@ -689,12 +722,12 @@ TRACK_MAIN_DEPARTMENTS = {
     'engineering': {'ai', 'electrical', 'simulation', 'experiment'},
     'media': {'communication'},
 }
-SUB_DEPARTMENTS = {'communication', 'english', 'manufacturing'}
+SUB_DEPARTMENTS = {'communication', 'english', 'manufacturing', 'event'}
 DEPARTMENT_LABELS = {
     'ai': 'AI for Automobile', 'electrical': 'Điện - Điện tử',
     'simulation': 'Mô phỏng', 'experiment': 'Thí nghiệm',
     'communication': 'Truyền thông', 'english': 'Tiếng Anh',
-    'manufacturing': 'Cơ khí',
+    'manufacturing': 'Cơ khí', 'event': 'Sự kiện',
 }
 TRACK_LABELS = {
     'engineering': 'Kỹ thuật',
@@ -707,7 +740,6 @@ def allowed_cv_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_CV_EXTENSIONS
 
 @app.route('/api/apply', methods=['POST'])
-@limiter.limit('5 per hour')
 def apply():
     """Public endpoint used by the BK-AUTO Website recruitment form. Creates a
     Member in the 'Chờ duyệt' screening state — it does not go straight into
@@ -888,7 +920,6 @@ def confirm_check_token(token):
     return jsonify({'valid': bool(member)}), (200 if member else 404)
 
 @app.route('/api/confirm/<token>/verify', methods=['POST'])
-@limiter.limit('10 per hour')
 def confirm_verify(token):
     member = Member.query.filter_by(confirm_token=token).first()
     if not member:
@@ -899,7 +930,6 @@ def confirm_verify(token):
     return jsonify(confirm_summary(member))
 
 @app.route('/api/confirm/<token>/confirm', methods=['POST'])
-@limiter.limit('10 per hour')
 def confirm_participation(token):
     member = Member.query.filter_by(confirm_token=token).first()
     if not member:
@@ -930,7 +960,6 @@ def confirm_participation(token):
     return jsonify(confirm_summary(member))
 
 @app.route('/api/confirm/<token>/reschedule', methods=['POST'])
-@limiter.limit('10 per hour')
 def confirm_reschedule(token):
     member = Member.query.filter_by(confirm_token=token).first()
     if not member:

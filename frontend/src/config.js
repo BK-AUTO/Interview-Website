@@ -27,6 +27,7 @@ export const DEPARTMENT_LABELS = {
   communication: 'Truyền thông',
   english: 'Tiếng Anh',
   manufacturing: 'Cơ khí',
+  event: 'Sự kiện',
 };
 
 export const TRACK_LABELS = {
