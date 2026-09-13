@@ -76,6 +76,7 @@ import {
   isMemberInActiveInterview,
   parseSubDepartments,
   parseSubDepartmentStates,
+  getSubDeptNextAction,
 } from '../config';
 import { openCandidateCV } from '../utils/cvCache';
 
@@ -181,21 +182,76 @@ const Management = ({ members, setMembers }) => {
   };
 
   const openEditModal = (member) => {
+    const parsedSubs = parseSubDepartments(member?.sub_departments);
+    const parsedStates = parseSubDepartmentStates(member?.sub_department_states);
+    parsedSubs.forEach((s) => {
+      if (!parsedStates[s]) parsedStates[s] = 'Chờ duyệt';
+    });
+
     setSelectedMember(
-      member || {
-        name: '',
-        MSSV: '',
-        specialist: '',
-        sub_departments: '[]',
-        sub_department_states: '{}',
-        email: '',
-        phone: '',
-        linkCV: '',
-        state: 'Đậu vòng đơn',
-        note: '',
-      }
+      member
+        ? {
+            ...member,
+            sub_departments: parsedSubs,
+            sub_department_states: parsedStates,
+            major_class: member.major_class || '',
+            student_type: member.student_type || 'hust',
+            application_track: member.application_track || 'engineering',
+          }
+        : {
+            name: '',
+            MSSV: '',
+            specialist: '',
+            sub_departments: [],
+            sub_department_states: {},
+            major_class: '',
+            student_type: 'hust',
+            application_track: 'engineering',
+            email: '',
+            phone: '',
+            linkCV: '',
+            state: 'Đậu vòng đơn',
+            note: '',
+          }
     );
     onEditOpen();
+  };
+
+  const handleToggleSubDepartment = (deptKey) => {
+    if (!selectedMember) return;
+    const currentSubs = Array.isArray(selectedMember.sub_departments)
+      ? [...selectedMember.sub_departments]
+      : parseSubDepartments(selectedMember.sub_departments);
+
+    let nextSubs;
+    let nextStates = { ...(selectedMember.sub_department_states || {}) };
+
+    if (currentSubs.includes(deptKey)) {
+      nextSubs = currentSubs.filter((k) => k !== deptKey);
+      delete nextStates[deptKey];
+    } else {
+      nextSubs = [...currentSubs, deptKey];
+      if (!nextStates[deptKey]) {
+        nextStates[deptKey] = 'Chờ duyệt';
+      }
+    }
+
+    setSelectedMember({
+      ...selectedMember,
+      sub_departments: nextSubs,
+      sub_department_states: nextStates,
+    });
+  };
+
+  const handleChangeSubDeptState = (subKey, newState) => {
+    if (!selectedMember) return;
+    setSelectedMember({
+      ...selectedMember,
+      sub_department_states: {
+        ...(selectedMember.sub_department_states || {}),
+        [subKey]: newState,
+      },
+    });
   };
 
   const handleModalClose = () => {
@@ -205,14 +261,34 @@ const Management = ({ members, setMembers }) => {
 
   const handleModalSave = async () => {
     if (!selectedMember) return;
+    if (!selectedMember.name?.trim()) {
+      toast({ title: 'Vui lòng nhập họ và tên', status: 'warning', duration: 2500 });
+      return;
+    }
+    if (!selectedMember.MSSV?.trim()) {
+      toast({ title: 'Vui lòng nhập MSSV / Mã định danh', status: 'warning', duration: 2500 });
+      return;
+    }
+    if (!selectedMember.specialist) {
+      toast({ title: 'Vui lòng chọn mảng chuyên môn chính', status: 'warning', duration: 2500 });
+      return;
+    }
+
+    const payload = {
+      ...selectedMember,
+      sub_departments: Array.isArray(selectedMember.sub_departments)
+        ? selectedMember.sub_departments
+        : parseSubDepartments(selectedMember.sub_departments),
+      sub_department_states: selectedMember.sub_department_states || {},
+    };
 
     try {
       if (selectedMember.id) {
-        const response = await api.put(`/api/members/${selectedMember.id}`, selectedMember);
+        const response = await api.put(`/api/members/${selectedMember.id}`, payload);
         setMembers((prev) => prev.map((m) => (m.id === selectedMember.id ? response.data.member : m)));
         toast({ title: 'Cập nhật thành công', status: 'success', duration: 2500, isClosable: true });
       } else {
-        const response = await api.post('/api/members', selectedMember);
+        const response = await api.post('/api/members', payload);
         setMembers((prev) => [...prev, response.data.member]);
         toast({ title: 'Thêm ứng viên thành công', status: 'success', duration: 2500, isClosable: true });
       }
@@ -221,7 +297,7 @@ const Management = ({ members, setMembers }) => {
       console.error('Error saving member:', error);
       toast({
         title: 'Lỗi lưu thông tin',
-        description: error.response?.data?.message || error.message,
+        description: error.response?.data?.error || error.response?.data?.message || error.message,
         status: 'error',
         duration: 3500,
         isClosable: true,
@@ -627,9 +703,9 @@ const Management = ({ members, setMembers }) => {
                       </Td>
 
                       {/* Sub-Department Independent Flow */}
-                      <Td py={3} maxW="270px">
+                      <Td py={3} minW="260px" maxW="340px">
                         {subDepts.length > 0 ? (
-                          <VStack align="flex-start" spacing={1.5}>
+                          <VStack align="flex-start" spacing={2}>
                             {subDepts.map((sub) => {
                               const currentSubState = subStates[sub] || 'Chờ duyệt';
                               const isLocked = isSubDeptLocked(member.state);
@@ -639,95 +715,190 @@ const Management = ({ members, setMembers }) => {
                                 color: 'gray.700',
                                 borderColor: 'gray.200',
                               };
+                              const nextAction = getSubDeptNextAction(member.state, currentSubState);
 
                               return (
-                                <HStack key={sub} spacing={1.5} flexWrap="wrap" justify="space-between" w="full">
-                                  <Text fontSize="xs" fontWeight="medium" color="gray.700">
-                                    {DEPARTMENT_LABELS[sub] || sub}:
-                                  </Text>
+                                <Box key={sub} w="full">
+                                  <Flex align="center" justify="space-between" gap={2} flexWrap="wrap">
+                                    <HStack spacing={1.5} align="center">
+                                      <Text fontSize="xs" fontWeight="semibold" color="gray.700" whiteSpace="nowrap">
+                                        {DEPARTMENT_LABELS[sub] || sub}:
+                                      </Text>
 
-                                  {isLocked ? (
-                                    <Tooltip
-                                      label={`Mảng chính (${DEPARTMENT_LABELS[member.specialist] || member.specialist}) chưa đậu vòng đơn`}
-                                      hasArrow
-                                      placement="top"
-                                    >
-                                      <Badge
-                                        size="xs"
-                                        h="20px"
-                                        px={2}
-                                        fontSize="10px"
-                                        bg="gray.100"
-                                        color="gray.400"
-                                        borderWidth="1px"
-                                        borderColor="gray.200"
-                                        display="inline-flex"
-                                        alignItems="center"
-                                        gap={1}
-                                        cursor="not-allowed"
-                                      >
-                                        <FaLock size={8} /> {currentSubState}
-                                      </Badge>
-                                    </Tooltip>
-                                  ) : (
-                                    <Menu size="xs" isLazy>
-                                      <MenuButton
-                                        as={Button}
-                                        size="xs"
-                                        h="20px"
-                                        px={2}
-                                        fontSize="10px"
-                                        bg={subStyle.bg}
-                                        color={subStyle.color}
-                                        borderWidth="1px"
-                                        borderColor={subStyle.borderColor}
-                                        rightIcon={<ChevronDownIcon />}
-                                      >
-                                        {currentSubState}
-                                      </MenuButton>
-                                      <MenuList fontSize="xs" minW="160px" zIndex={10}>
-                                        <MenuOptionGroup title="Vòng đơn" type="radio" value={currentSubState}>
-                                          {SUB_SCREENING_STATES.map((st) => (
-                                            <MenuItem
-                                              key={st}
-                                              onClick={() => handleUpdateSubDeptState(member, sub, st)}
-                                              fontWeight={currentSubState === st ? 'bold' : 'normal'}
-                                              bg={currentSubState === st ? 'primary.50' : 'transparent'}
-                                              color={currentSubState === st ? 'primary.600' : 'gray.800'}
-                                            >
-                                              {st}
-                                            </MenuItem>
-                                          ))}
-                                        </MenuOptionGroup>
-                                        <MenuDivider />
-                                        <MenuOptionGroup
-                                          title={isInterviewLocked ? "Phỏng vấn (🔒 Chờ mảng chính)" : "Vòng phỏng vấn"}
-                                          type="radio"
-                                          value={currentSubState}
+                                      {isLocked ? (
+                                        <Tooltip
+                                          label={`Mảng chính (${DEPARTMENT_LABELS[member.specialist] || member.specialist}) chưa đậu vòng đơn`}
+                                          hasArrow
+                                          placement="top"
                                         >
-                                          {SUB_INTERVIEW_STATES.map((st) => {
-                                            const disabled = isInterviewLocked || currentSubState === 'Trượt vòng đơn';
-                                            return (
-                                              <MenuItem
-                                                key={st}
-                                                isDisabled={disabled}
-                                                onClick={() => !disabled && handleUpdateSubDeptState(member, sub, st)}
-                                                fontWeight={currentSubState === st ? 'bold' : 'normal'}
-                                                bg={currentSubState === st ? 'primary.50' : 'transparent'}
-                                                color={currentSubState === st ? 'primary.600' : (disabled ? 'gray.400' : 'gray.800')}
-                                              >
-                                                <HStack justify="space-between" w="full">
-                                                  <Text>{st}</Text>
-                                                  {disabled && <FaLock size={8} color="gray" />}
-                                                </HStack>
-                                              </MenuItem>
-                                            );
-                                          })}
-                                        </MenuOptionGroup>
-                                      </MenuList>
-                                    </Menu>
-                                  )}
-                                </HStack>
+                                          <Badge
+                                            fontSize="10px"
+                                            px={1.5}
+                                            py={0.5}
+                                            bg="gray.100"
+                                            color="gray.400"
+                                            borderWidth="1px"
+                                            borderColor="gray.200"
+                                            borderRadius="md"
+                                            display="inline-flex"
+                                            alignItems="center"
+                                            gap={1}
+                                            cursor="not-allowed"
+                                          >
+                                            <FaLock size={8} /> {currentSubState}
+                                          </Badge>
+                                        </Tooltip>
+                                      ) : (
+                                        <Menu size="xs" isLazy>
+                                          <MenuButton
+                                            as={Badge}
+                                            cursor="pointer"
+                                            fontSize="10px"
+                                            px={1.5}
+                                            py={0.5}
+                                            borderRadius="md"
+                                            bg={subStyle.bg}
+                                            color={subStyle.color}
+                                            borderWidth="1px"
+                                            borderColor={subStyle.borderColor}
+                                            display="inline-flex"
+                                            alignItems="center"
+                                            gap={0.5}
+                                            title="Nhấn để đổi trạng thái tuỳ chọn"
+                                          >
+                                            {currentSubState} ▾
+                                          </MenuButton>
+                                          <MenuList fontSize="xs" minW="160px" zIndex={10}>
+                                            <MenuOptionGroup title="Vòng đơn" type="radio" value={currentSubState}>
+                                              {SUB_SCREENING_STATES.map((st) => (
+                                                <MenuItem
+                                                  key={st}
+                                                  onClick={() => handleUpdateSubDeptState(member, sub, st)}
+                                                  fontWeight={currentSubState === st ? 'bold' : 'normal'}
+                                                  bg={currentSubState === st ? 'primary.50' : 'transparent'}
+                                                  color={currentSubState === st ? 'primary.600' : 'gray.800'}
+                                                >
+                                                  {st}
+                                                </MenuItem>
+                                              ))}
+                                            </MenuOptionGroup>
+                                            <MenuDivider />
+                                            <MenuOptionGroup
+                                              title={isInterviewLocked ? "Phỏng vấn (🔒 Chờ mảng chính)" : "Vòng phỏng vấn"}
+                                              type="radio"
+                                              value={currentSubState}
+                                            >
+                                              {SUB_INTERVIEW_STATES.map((st) => {
+                                                const disabled = isInterviewLocked || currentSubState === 'Trượt vòng đơn';
+                                                return (
+                                                  <MenuItem
+                                                    key={st}
+                                                    isDisabled={disabled}
+                                                    onClick={() => !disabled && handleUpdateSubDeptState(member, sub, st)}
+                                                    fontWeight={currentSubState === st ? 'bold' : 'normal'}
+                                                    bg={currentSubState === st ? 'primary.50' : 'transparent'}
+                                                    color={currentSubState === st ? 'primary.600' : (disabled ? 'gray.400' : 'gray.800')}
+                                                  >
+                                                    <HStack justify="space-between" w="full">
+                                                      <Text>{st}</Text>
+                                                      {disabled && <FaLock size={8} color="gray" />}
+                                                    </HStack>
+                                                  </MenuItem>
+                                                );
+                                              })}
+                                            </MenuOptionGroup>
+                                          </MenuList>
+                                        </Menu>
+                                      )}
+                                    </HStack>
+
+                                    {/* Sequential advance buttons matching main flow */}
+                                    <HStack spacing={1} align="center">
+                                      {nextAction.type === 'screen' && (
+                                        <>
+                                          <Button
+                                            size="xs"
+                                            h="22px"
+                                            fontSize="11px"
+                                            px={2}
+                                            colorScheme="info"
+                                            onClick={() => handleUpdateSubDeptState(member, sub, 'Đậu vòng đơn')}
+                                          >
+                                            Duyệt đậu
+                                          </Button>
+                                          <Button
+                                            size="xs"
+                                            h="22px"
+                                            fontSize="11px"
+                                            px={2}
+                                            colorScheme="red"
+                                            variant="ghost"
+                                            onClick={() => handleUpdateSubDeptState(member, sub, 'Trượt vòng đơn')}
+                                          >
+                                            Trượt
+                                          </Button>
+                                        </>
+                                      )}
+
+                                      {nextAction.type === 'advance' && (
+                                        <Button
+                                          size="xs"
+                                          h="22px"
+                                          fontSize="11px"
+                                          px={2}
+                                          colorScheme={nextAction.colorScheme}
+                                          rightIcon={<FaArrowRight />}
+                                          onClick={() => handleUpdateSubDeptState(member, sub, nextAction.nextState)}
+                                        >
+                                          {nextAction.label}
+                                        </Button>
+                                      )}
+
+                                      {nextAction.type === 'evaluate' && (
+                                        <>
+                                          <Button
+                                            size="xs"
+                                            h="22px"
+                                            fontSize="11px"
+                                            px={2}
+                                            colorScheme="primary"
+                                            onClick={() => handleUpdateSubDeptState(member, sub, 'Đạt')}
+                                          >
+                                            Đạt
+                                          </Button>
+                                          <Button
+                                            size="xs"
+                                            h="22px"
+                                            fontSize="11px"
+                                            px={2}
+                                            colorScheme="red"
+                                            variant="outline"
+                                            onClick={() => handleUpdateSubDeptState(member, sub, 'Không đạt')}
+                                          >
+                                            K.Đạt
+                                          </Button>
+                                        </>
+                                      )}
+
+                                      {nextAction.type === 'locked' && !isLocked && (
+                                        <Tooltip label={nextAction.reason} hasArrow placement="top">
+                                          <Badge
+                                            fontSize="10px"
+                                            h="20px"
+                                            px={1.5}
+                                            colorScheme="gray"
+                                            display="inline-flex"
+                                            alignItems="center"
+                                            gap={1}
+                                            cursor="not-allowed"
+                                          >
+                                            <FaLock size={8} /> {nextAction.label}
+                                          </Badge>
+                                        </Tooltip>
+                                      )}
+                                    </HStack>
+                                  </Flex>
+                                </Box>
                               );
                             })}
                           </VStack>
@@ -811,7 +982,7 @@ const Management = ({ members, setMembers }) => {
                     />
                   </FormControl>
                   <FormControl isRequired>
-                    <FormLabel fontSize="xs" color="gray.600">MSSV</FormLabel>
+                    <FormLabel fontSize="xs" color="gray.600">MSSV / Mã định danh</FormLabel>
                     <Input
                       value={selectedMember.MSSV || ''}
                       onChange={(e) => setSelectedMember({ ...selectedMember, MSSV: e.target.value })}
@@ -840,13 +1011,52 @@ const Management = ({ members, setMembers }) => {
                 </HStack>
 
                 <HStack spacing={4} w="full">
+                  <FormControl>
+                    <FormLabel fontSize="xs" color="gray.600">Lớp / Chuyên ngành</FormLabel>
+                    <Input
+                      value={selectedMember.major_class || ''}
+                      onChange={(e) => setSelectedMember({ ...selectedMember, major_class: e.target.value })}
+                      placeholder="VD: Kỹ thuật Ô tô 01 - K66"
+                    />
+                  </FormControl>
+                  <FormControl>
+                    <FormLabel fontSize="xs" color="gray.600">Loại sinh viên</FormLabel>
+                    <Select
+                      value={selectedMember.student_type || 'hust'}
+                      onChange={(e) => setSelectedMember({ ...selectedMember, student_type: e.target.value })}
+                    >
+                      <option value="hust" style={{ background: '#ffffff', color: '#141414' }}>Sinh viên ĐHBK Hà Nội (HUST)</option>
+                      <option value="external" style={{ background: '#ffffff', color: '#141414' }}>Sinh viên trường ngoài</option>
+                    </Select>
+                  </FormControl>
+                </HStack>
+
+                <HStack spacing={4} w="full">
                   <FormControl isRequired>
                     <FormLabel fontSize="xs" color="gray.600">Mảng chuyên môn chính</FormLabel>
-                    <Input
+                    <Select
                       value={selectedMember.specialist || ''}
-                      onChange={(e) => setSelectedMember({ ...selectedMember, specialist: e.target.value })}
-                      placeholder="VD: electrical / communication"
-                    />
+                      onChange={(e) => {
+                        const newSpec = e.target.value;
+                        // If selected sub-departments contained this new main specialist, remove it from subs
+                        const filteredSubs = (selectedMember.sub_departments || []).filter((s) => s !== newSpec);
+                        const nextStates = { ...(selectedMember.sub_department_states || {}) };
+                        delete nextStates[newSpec];
+                        setSelectedMember({
+                          ...selectedMember,
+                          specialist: newSpec,
+                          sub_departments: filteredSubs,
+                          sub_department_states: nextStates,
+                        });
+                      }}
+                      placeholder="-- Chọn chuyên môn chính --"
+                    >
+                      {Object.entries(DEPARTMENT_LABELS).map(([key, label]) => (
+                        <option key={key} value={key} style={{ background: '#ffffff', color: '#141414' }}>
+                          {label}
+                        </option>
+                      ))}
+                    </Select>
                   </FormControl>
                   <FormControl>
                     <FormLabel fontSize="xs" color="gray.600">Trạng thái mảng chính</FormLabel>
@@ -863,21 +1073,73 @@ const Management = ({ members, setMembers }) => {
                   </FormControl>
                 </HStack>
 
+                {/* Sub-Departments Interactive Selection */}
                 <FormControl>
-                  <FormLabel fontSize="xs" color="gray.600">Mảng phụ (JSON array hoặc cách nhau bởi dấu phẩy)</FormLabel>
-                  <Input
-                    value={
-                      Array.isArray(selectedMember.sub_departments)
-                        ? JSON.stringify(selectedMember.sub_departments)
-                        : selectedMember.sub_departments || '[]'
-                    }
-                    onChange={(e) => setSelectedMember({ ...selectedMember, sub_departments: e.target.value })}
-                    placeholder='VD: ["communication", "event"]'
-                  />
+                  <FormLabel fontSize="xs" color="gray.600">
+                    Mảng chuyên môn phụ (Bấm vào để chọn / bỏ chọn)
+                  </FormLabel>
+                  <Flex wrap="wrap" gap={2} p={2.5} bg="gray.50" borderRadius="lg" borderWidth="1px" borderColor="gray.200">
+                    {Object.entries(DEPARTMENT_LABELS)
+                      .filter(([key]) => key !== selectedMember.specialist)
+                      .map(([key, label]) => {
+                        const isSelected = (selectedMember.sub_departments || []).includes(key);
+                        return (
+                          <Button
+                            key={key}
+                            size="xs"
+                            variant={isSelected ? 'solid' : 'outline'}
+                            colorScheme={isSelected ? 'purple' : 'gray'}
+                            onClick={() => handleToggleSubDepartment(key)}
+                            borderRadius="md"
+                          >
+                            {isSelected ? `✓ ${label}` : `+ ${label}`}
+                          </Button>
+                        );
+                      })}
+                  </Flex>
                 </FormControl>
 
+                {/* State selector for each selected sub-department */}
+                {Array.isArray(selectedMember.sub_departments) && selectedMember.sub_departments.length > 0 && (
+                  <Box w="full" p={3} bg="purple.50" borderRadius="lg" borderWidth="1px" borderColor="purple.200">
+                    <Text fontSize="xs" fontWeight="bold" color="purple.800" mb={2}>
+                      Trạng thái các mảng phụ đã chọn:
+                    </Text>
+                    <VStack spacing={2} align="stretch">
+                      {selectedMember.sub_departments.map((subKey) => (
+                        <HStack key={subKey} justify="space-between" bg="white" p={2} borderRadius="md" borderWidth="1px" borderColor="purple.100">
+                          <Text fontSize="xs" fontWeight="medium" color="gray.800">
+                            {DEPARTMENT_LABELS[subKey] || subKey}:
+                          </Text>
+                          <Select
+                            size="xs"
+                            w="160px"
+                            value={selectedMember.sub_department_states?.[subKey] || 'Chờ duyệt'}
+                            onChange={(e) => handleChangeSubDeptState(subKey, e.target.value)}
+                          >
+                            <optgroup label="Vòng đơn">
+                              {SUB_SCREENING_STATES.map((st) => (
+                                <option key={st} value={st} style={{ background: '#ffffff', color: '#141414' }}>
+                                  {st}
+                                </option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="Vòng phỏng vấn">
+                              {SUB_INTERVIEW_STATES.map((st) => (
+                                <option key={st} value={st} style={{ background: '#ffffff', color: '#141414' }}>
+                                  {st}
+                                </option>
+                              ))}
+                            </optgroup>
+                          </Select>
+                        </HStack>
+                      ))}
+                    </VStack>
+                  </Box>
+                )}
+
                 <FormControl>
-                  <FormLabel fontSize="xs" color="gray.600">Link CV</FormLabel>
+                  <FormLabel fontSize="xs" color="gray.600">Link CV / Hồ sơ</FormLabel>
                   <Input
                     value={selectedMember.linkCV || ''}
                     onChange={(e) => setSelectedMember({ ...selectedMember, linkCV: e.target.value })}

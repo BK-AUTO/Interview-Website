@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Modal,
   ModalOverlay,
@@ -41,6 +41,7 @@ import {
   FaLock,
   FaCheckCircle,
   FaInfoCircle,
+  FaArrowRight,
 } from 'react-icons/fa';
 import api from '../api/axios';
 import {
@@ -56,6 +57,7 @@ import {
   parseSubDepartmentStates,
   isSubDeptLocked,
   isSubDeptInterviewLocked,
+  getSubDeptNextAction,
 } from '../config';
 import { openCandidateCV } from '../utils/cvCache';
 
@@ -110,6 +112,61 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
     }
   }, [isOpen, liveCandidate?.id, fetchLogs]);
 
+  const handleAdvanceMainState = async () => {
+    if (!liveCandidate) return;
+    let nextState = '';
+    if (liveCandidate.state === 'Đã checkin') nextState = 'Gọi PV';
+    else if (liveCandidate.state === 'Gọi PV') nextState = 'Đang phỏng vấn';
+    else if (liveCandidate.state === 'Đang phỏng vấn') nextState = 'Đã phỏng vấn';
+    else return;
+
+    try {
+      const res = await api.put(`/api/members/${liveCandidate.id}`, { state: nextState });
+      if (setMembers) {
+        setMembers((prev) => prev.map((m) => (m.id === liveCandidate.id ? res.data.member : m)));
+      }
+      toast({ title: `Mảng chính: ${nextState}`, status: 'info', duration: 2500, isClosable: true });
+      fetchLogs();
+    } catch (err) {
+      toast({
+        title: 'Lỗi cập nhật',
+        description: err.response?.data?.error || err.response?.data?.message || err.message,
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleUpdateSubDeptState = async (subKey, newSubState) => {
+    if (!liveCandidate) return;
+    const subStates = parseSubDepartmentStates(liveCandidate.sub_department_states);
+    const updated = { ...subStates, [subKey]: newSubState };
+    try {
+      const res = await api.put(`/api/members/${liveCandidate.id}`, {
+        sub_department_states: updated,
+      });
+      if (setMembers) {
+        setMembers((prev) => prev.map((m) => (m.id === liveCandidate.id ? res.data.member : m)));
+      }
+      toast({
+        title: `Mảng phụ [${DEPARTMENT_LABELS[subKey] || subKey}]: ${newSubState}`,
+        status: 'success',
+        duration: 2500,
+        isClosable: true,
+      });
+      fetchLogs();
+    } catch (err) {
+      toast({
+        title: 'Lỗi cập nhật',
+        description: err.response?.data?.error || err.response?.data?.message || err.message,
+        status: 'error',
+        duration: 3500,
+        isClosable: true,
+      });
+    }
+  };
+
   if (!liveCandidate) return null;
 
   const stateProps = STATE_BADGE_PROPS[liveCandidate.state] || {
@@ -131,6 +188,19 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
   };
 
   const subDepts = parseSubDepts();
+
+  let mainAdvanceLabel = null;
+  let mainAdvanceColor = 'primary';
+  if (liveCandidate.state === 'Đã checkin') {
+    mainAdvanceLabel = 'Gọi PV';
+    mainAdvanceColor = 'warning';
+  } else if (liveCandidate.state === 'Gọi PV') {
+    mainAdvanceLabel = 'Bắt đầu PV';
+    mainAdvanceColor = 'secondary';
+  } else if (liveCandidate.state === 'Đang phỏng vấn') {
+    mainAdvanceLabel = 'Kết thúc PV';
+    mainAdvanceColor = 'success';
+  }
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="2xl" scrollBehavior="inside">
@@ -160,12 +230,12 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
                 fontWeight="bold"
                 fontSize="lg"
               >
-                {candidate.name ? candidate.name.trim().slice(-1) : 'U'}
+                {liveCandidate.name ? liveCandidate.name.trim().slice(-1) : 'U'}
               </Box>
               <Box>
                 <HStack spacing={2}>
                   <Text fontSize="lg" fontWeight="bold" color="gray.900">
-                    {candidate.name}
+                    {liveCandidate.name}
                   </Text>
                   <Badge
                     fontSize="11px"
@@ -173,11 +243,11 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
                     py={0.5}
                     borderRadius="md"
                     borderWidth="1px"
-                    bg={candidate.application_track === 'media' ? 'rgba(250, 140, 22, 0.12)' : 'rgba(24, 144, 255, 0.12)'}
-                    color={candidate.application_track === 'media' ? 'orange.600' : 'info.600'}
-                    borderColor={candidate.application_track === 'media' ? 'rgba(250, 140, 22, 0.3)' : 'rgba(24, 144, 255, 0.3)'}
+                    bg={liveCandidate.application_track === 'media' ? 'rgba(250, 140, 22, 0.12)' : 'rgba(24, 144, 255, 0.12)'}
+                    color={liveCandidate.application_track === 'media' ? 'orange.600' : 'info.600'}
+                    borderColor={liveCandidate.application_track === 'media' ? 'rgba(250, 140, 22, 0.3)' : 'rgba(24, 144, 255, 0.3)'}
                   >
-                    {TRACK_LABELS[candidate.application_track] || (candidate.application_track === 'media' ? 'Truyền thông' : 'Kỹ thuật')}
+                    {TRACK_LABELS[liveCandidate.application_track] || (liveCandidate.application_track === 'media' ? 'Truyền thông' : 'Kỹ thuật')}
                   </Badge>
                   <Badge
                     fontSize="11px"
@@ -189,12 +259,12 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
                     color={stateProps.color}
                     borderColor={stateProps.borderColor}
                   >
-                    {candidate.state}
+                    {liveCandidate.state}
                   </Badge>
                 </HStack>
                 <Text fontSize="xs" color="gray.500">
-                  {candidate.student_type === 'external' ? `Trường: ${candidate.school || candidate.MSSV}` : `MSSV: ${candidate.MSSV}`}
-                  {' • '}Mảng: {DEPARTMENT_LABELS[candidate.specialist] || candidate.specialist || 'Chung'}
+                  {liveCandidate.student_type === 'external' ? `Trường: ${liveCandidate.school || liveCandidate.MSSV}` : `MSSV: ${liveCandidate.MSSV}`}
+                  {' • '}Mảng: {DEPARTMENT_LABELS[liveCandidate.specialist] || liveCandidate.specialist || 'Chung'}
                 </Text>
               </Box>
             </HStack>
@@ -212,10 +282,10 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
               <Box p={3} borderRadius="lg" bg="gray.50" borderWidth="1px" borderColor="gray.200">
                 <HStack spacing={2} color="gray.500" fontSize="xs" mb={1}>
                   <FaIdCard />
-                  <Text>{candidate.student_type === 'external' ? 'Trường đang theo học' : 'MSSV / Mã định danh'}</Text>
+                  <Text>{liveCandidate.student_type === 'external' ? 'Trường đang theo học' : 'MSSV / Mã định danh'}</Text>
                 </HStack>
                 <Text fontSize="sm" fontWeight="semibold" color="gray.900">
-                  {candidate.student_type === 'external' ? (candidate.school || candidate.MSSV) : candidate.MSSV}
+                  {liveCandidate.student_type === 'external' ? (liveCandidate.school || liveCandidate.MSSV) : liveCandidate.MSSV}
                 </Text>
               </Box>
 
@@ -225,7 +295,7 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
                   <Text>Số điện thoại</Text>
                 </HStack>
                 <Text fontSize="sm" fontWeight="semibold" color="gray.900">
-                  {candidate.phone || 'Chưa cập nhật'}
+                  {liveCandidate.phone || 'Chưa cập nhật'}
                 </Text>
               </Box>
 
@@ -235,7 +305,7 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
                   <Text>Email</Text>
                 </HStack>
                 <Text fontSize="sm" fontWeight="semibold" color="gray.900" isTruncated>
-                  {candidate.email || 'Chưa cập nhật'}
+                  {liveCandidate.email || 'Chưa cập nhật'}
                 </Text>
               </Box>
 
@@ -245,8 +315,8 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
                   <Text>Lớp / Chuyên ngành</Text>
                 </HStack>
                 <Text fontSize="sm" fontWeight="semibold" color="gray.900">
-                  {candidate.major_class || 'Chưa cập nhật'}
-                  {candidate.student_type === 'hust' ? ' (HUST)' : candidate.student_type === 'external' ? ' (Ngoài HUST)' : ''}
+                  {liveCandidate.major_class || 'Chưa cập nhật'}
+                  {liveCandidate.student_type === 'hust' ? ' (HUST)' : liveCandidate.student_type === 'external' ? ' (Ngoài HUST)' : ''}
                 </Text>
               </Box>
 
@@ -256,7 +326,7 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
                   <Text>Mảng chuyên môn chính</Text>
                 </HStack>
                 <Badge colorScheme="primary" variant="subtle" fontSize="xs" borderRadius="md" px={2}>
-                  {DEPARTMENT_LABELS[candidate.specialist] || candidate.specialist || 'Chung'}
+                  {DEPARTMENT_LABELS[liveCandidate.specialist] || liveCandidate.specialist || 'Chung'}
                 </Badge>
                 {subDepts.length > 0 && (
                   <HStack spacing={1} mt={1.5} flexWrap="wrap">
@@ -299,18 +369,18 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
                   ⚠️ Lý do xin đổi lịch:
                 </Text>
                 <Text fontSize="xs" color="gray.700">
-                  {candidate.reschedule_request}
+                  {liveCandidate.reschedule_request}
                 </Text>
               </Box>
             )}
 
-            {candidate.note && (
+            {liveCandidate.note && (
               <Box mt={3} p={3} borderRadius="lg" bg="gray.50" borderWidth="1px" borderColor="gray.200">
                 <Text fontSize="xs" fontWeight="bold" color="gray.500" mb={1}>
                   Câu hỏi / Ghi chú từ ứng viên:
                 </Text>
                 <Text fontSize="xs" color="gray.700" whiteSpace="pre-wrap">
-                  {candidate.note}
+                  {liveCandidate.note}
                 </Text>
               </Box>
             )}
@@ -354,7 +424,20 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
                   </Badge>
                 </HStack>
 
-                {/* Quick advance / state selection for Main Department */}
+                {/* Main Department Advance Button & State Selector */}
+                {mainAdvanceLabel && (
+                  <Button
+                    size="xs"
+                    colorScheme={mainAdvanceColor}
+                    rightIcon={<FaArrowRight />}
+                    w="full"
+                    mb={2}
+                    onClick={handleAdvanceMainState}
+                  >
+                    {mainAdvanceLabel}
+                  </Button>
+                )}
+
                 <Menu size="sm" isLazy>
                   <MenuButton as={Button} size="xs" colorScheme="primary" variant="outline" w="full" rightIcon={<FaSyncAlt size={10} />}>
                     Đổi trạng thái mảng chính
@@ -370,6 +453,7 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
                               setMembers((prev) => prev.map((m) => (m.id === liveCandidate.id ? res.data.member : m)));
                             }
                             toast({ title: `Mảng chính: ${st}`, status: 'info', duration: 2500, isClosable: true });
+                            fetchLogs();
                           } catch (err) {
                             toast({ title: 'Lỗi cập nhật', description: err.message, status: 'error', duration: 3000, isClosable: true });
                           }
@@ -443,154 +527,192 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
                         color: 'gray.700',
                         borderColor: 'gray.200',
                       };
+                      const nextAction = getSubDeptNextAction(liveCandidate.state, currentSubState);
 
                       return (
-                        <Flex
+                        <Box
                           key={sub}
-                          justify="space-between"
-                          align="center"
                           p={2.5}
                           borderRadius="md"
                           bg="white"
                           borderWidth="1px"
                           borderColor="gray.200"
                         >
-                          <Text fontSize="xs" fontWeight="semibold" color="gray.800">
-                            {DEPARTMENT_LABELS[sub] || sub}
-                          </Text>
+                          <Flex justify="space-between" align="center" gap={2} flexWrap="wrap">
+                            <Text fontSize="xs" fontWeight="semibold" color="gray.800">
+                              {DEPARTMENT_LABELS[sub] || sub}
+                            </Text>
 
-                          {isLocked ? (
-                            <Tooltip
-                              label={`Mảng chính (${DEPARTMENT_LABELS[liveCandidate.specialist] || liveCandidate.specialist}) chưa đậu vòng đơn`}
-                              hasArrow
-                              placement="top"
-                            >
-                              <Badge
-                                size="xs"
-                                h="24px"
-                                px={2.5}
-                                fontSize="11px"
-                                bg="gray.100"
-                                color="gray.400"
-                                borderWidth="1px"
-                                borderColor="gray.200"
-                                display="inline-flex"
-                                alignItems="center"
-                                gap={1.5}
-                                cursor="not-allowed"
-                              >
-                                <FaLock size={9} /> {currentSubState}
-                              </Badge>
-                            </Tooltip>
-                          ) : (
-                            <Menu size="xs" isLazy>
-                              <MenuButton
-                                as={Button}
-                                size="xs"
-                                h="24px"
-                                px={2.5}
-                                fontSize="11px"
-                                bg={subStyle.bg}
-                                color={subStyle.color}
-                                borderWidth="1px"
-                                borderColor={subStyle.borderColor}
-                              >
-                                {currentSubState} ▾
-                              </MenuButton>
-                              <MenuList fontSize="xs" minW="160px" zIndex={10}>
-                                <MenuOptionGroup title="Vòng đơn" type="radio" value={currentSubState}>
-                                  {SUB_SCREENING_STATES.map((st) => (
-                                    <MenuItem
-                                      key={st}
-                                      onClick={async () => {
-                                        const updated = { ...subStates, [sub]: st };
-                                        try {
-                                          const res = await api.put(`/api/members/${liveCandidate.id}`, {
-                                            sub_department_states: updated,
-                                          });
-                                          if (setMembers) {
-                                            setMembers((prev) => prev.map((m) => (m.id === liveCandidate.id ? res.data.member : m)));
-                                          }
-                                          toast({
-                                            title: `Mảng phụ [${DEPARTMENT_LABELS[sub] || sub}]: ${st}`,
-                                            status: 'success',
-                                            duration: 2500,
-                                            isClosable: true,
-                                          });
-                                        } catch (err) {
-                                          toast({
-                                            title: 'Lỗi cập nhật',
-                                            description: err.response?.data?.error || err.response?.data?.message || err.message,
-                                            status: 'error',
-                                            duration: 3500,
-                                            isClosable: true,
-                                          });
-                                        }
-                                      }}
-                                      fontWeight={currentSubState === st ? 'bold' : 'normal'}
-                                      bg={currentSubState === st ? 'primary.50' : 'transparent'}
-                                      color={currentSubState === st ? 'primary.600' : 'gray.800'}
-                                    >
-                                      {st}
-                                    </MenuItem>
-                                  ))}
-                                </MenuOptionGroup>
-
-                                <MenuDivider />
-
-                                <MenuOptionGroup
-                                  title={isInterviewLocked ? "Phỏng vấn (🔒 Chờ mảng chính)" : "Vòng phỏng vấn"}
-                                  type="radio"
-                                  value={currentSubState}
+                            <HStack spacing={1.5} align="center" flexWrap="wrap" justify="flex-end">
+                              {isLocked ? (
+                                <Tooltip
+                                  label={`Mảng chính (${DEPARTMENT_LABELS[liveCandidate.specialist] || liveCandidate.specialist}) chưa đậu vòng đơn`}
+                                  hasArrow
+                                  placement="top"
                                 >
-                                  {SUB_INTERVIEW_STATES.map((st) => {
-                                    const disabled = isInterviewLocked || currentSubState === 'Trượt vòng đơn';
-                                    return (
-                                      <MenuItem
-                                        key={st}
-                                        isDisabled={disabled}
-                                        onClick={async () => {
-                                          if (disabled) return;
-                                          const updated = { ...subStates, [sub]: st };
-                                          try {
-                                            const res = await api.put(`/api/members/${liveCandidate.id}`, {
-                                              sub_department_states: updated,
-                                            });
-                                            if (setMembers) {
-                                              setMembers((prev) => prev.map((m) => (m.id === liveCandidate.id ? res.data.member : m)));
-                                            }
-                                            toast({
-                                              title: `Mảng phụ [${DEPARTMENT_LABELS[sub] || sub}]: ${st}`,
-                                              status: 'success',
-                                              duration: 2500,
-                                              isClosable: true,
-                                            });
-                                          } catch (err) {
-                                            toast({
-                                              title: 'Lỗi cập nhật',
-                                              description: err.response?.data?.error || err.response?.data?.message || err.message,
-                                              status: 'error',
-                                              duration: 3500,
-                                              isClosable: true,
-                                            });
-                                          }
-                                        }}
-                                        fontWeight={currentSubState === st ? 'bold' : 'normal'}
-                                        bg={currentSubState === st ? 'primary.50' : 'transparent'}
-                                        color={currentSubState === st ? 'primary.600' : (disabled ? 'gray.400' : 'gray.800')}
-                                      >
-                                        <HStack justify="space-between" w="full">
-                                          <Text>{st}</Text>
-                                          {disabled && <FaLock size={9} color="gray" />}
-                                        </HStack>
-                                      </MenuItem>
-                                    );
-                                  })}
-                                </MenuOptionGroup>
-                              </MenuList>
-                            </Menu>
-                          )}
-                        </Flex>
+                                  <Badge
+                                    size="xs"
+                                    h="24px"
+                                    px={2.5}
+                                    fontSize="11px"
+                                    bg="gray.100"
+                                    color="gray.400"
+                                    borderWidth="1px"
+                                    borderColor="gray.200"
+                                    display="inline-flex"
+                                    alignItems="center"
+                                    gap={1.5}
+                                    cursor="not-allowed"
+                                  >
+                                    <FaLock size={9} /> {currentSubState}
+                                  </Badge>
+                                </Tooltip>
+                              ) : (
+                                <Menu size="xs" isLazy>
+                                  <MenuButton
+                                    as={Button}
+                                    size="xs"
+                                    h="24px"
+                                    px={2.5}
+                                    fontSize="11px"
+                                    bg={subStyle.bg}
+                                    color={subStyle.color}
+                                    borderWidth="1px"
+                                    borderColor={subStyle.borderColor}
+                                  >
+                                    {currentSubState} ▾
+                                  </MenuButton>
+                                  <MenuList fontSize="xs" minW="160px" zIndex={10}>
+                                    <MenuOptionGroup title="Vòng đơn" type="radio" value={currentSubState}>
+                                      {SUB_SCREENING_STATES.map((st) => (
+                                        <MenuItem
+                                          key={st}
+                                          onClick={() => handleUpdateSubDeptState(sub, st)}
+                                          fontWeight={currentSubState === st ? 'bold' : 'normal'}
+                                          bg={currentSubState === st ? 'primary.50' : 'transparent'}
+                                          color={currentSubState === st ? 'primary.600' : 'gray.800'}
+                                        >
+                                          {st}
+                                        </MenuItem>
+                                      ))}
+                                    </MenuOptionGroup>
+
+                                    <MenuDivider />
+
+                                    <MenuOptionGroup
+                                      title={isInterviewLocked ? "Phỏng vấn (🔒 Chờ mảng chính)" : "Vòng phỏng vấn"}
+                                      type="radio"
+                                      value={currentSubState}
+                                    >
+                                      {SUB_INTERVIEW_STATES.map((st) => {
+                                        const disabled = isInterviewLocked || currentSubState === 'Trượt vòng đơn';
+                                        return (
+                                          <MenuItem
+                                            key={st}
+                                            isDisabled={disabled}
+                                            onClick={() => !disabled && handleUpdateSubDeptState(sub, st)}
+                                            fontWeight={currentSubState === st ? 'bold' : 'normal'}
+                                            bg={currentSubState === st ? 'primary.50' : 'transparent'}
+                                            color={currentSubState === st ? 'primary.600' : (disabled ? 'gray.400' : 'gray.800')}
+                                          >
+                                            <HStack justify="space-between" w="full">
+                                              <Text>{st}</Text>
+                                              {disabled && <FaLock size={9} color="gray" />}
+                                            </HStack>
+                                          </MenuItem>
+                                        );
+                                      })}
+                                    </MenuOptionGroup>
+                                  </MenuList>
+                                </Menu>
+                              )}
+
+                              {/* Sequential advance action buttons */}
+                              {nextAction.type === 'screen' && (
+                                <>
+                                  <Button
+                                    size="xs"
+                                    h="24px"
+                                    fontSize="11px"
+                                    px={2}
+                                    colorScheme="info"
+                                    onClick={() => handleUpdateSubDeptState(sub, 'Đậu vòng đơn')}
+                                  >
+                                    Duyệt đậu
+                                  </Button>
+                                  <Button
+                                    size="xs"
+                                    h="24px"
+                                    fontSize="11px"
+                                    px={2}
+                                    colorScheme="red"
+                                    variant="ghost"
+                                    onClick={() => handleUpdateSubDeptState(sub, 'Trượt vòng đơn')}
+                                  >
+                                    Trượt
+                                  </Button>
+                                </>
+                              )}
+
+                              {nextAction.type === 'advance' && (
+                                <Button
+                                  size="xs"
+                                  h="24px"
+                                  fontSize="11px"
+                                  px={2}
+                                  colorScheme={nextAction.colorScheme}
+                                  rightIcon={<FaArrowRight />}
+                                  onClick={() => handleUpdateSubDeptState(sub, nextAction.nextState)}
+                                >
+                                  {nextAction.label}
+                                </Button>
+                              )}
+
+                              {nextAction.type === 'evaluate' && (
+                                <>
+                                  <Button
+                                    size="xs"
+                                    h="24px"
+                                    fontSize="11px"
+                                    px={2}
+                                    colorScheme="primary"
+                                    onClick={() => handleUpdateSubDeptState(sub, 'Đạt')}
+                                  >
+                                    Đạt
+                                  </Button>
+                                  <Button
+                                    size="xs"
+                                    h="24px"
+                                    fontSize="11px"
+                                    px={2}
+                                    colorScheme="red"
+                                    variant="outline"
+                                    onClick={() => handleUpdateSubDeptState(sub, 'Không đạt')}
+                                  >
+                                    K.Đạt
+                                  </Button>
+                                </>
+                              )}
+
+                              {nextAction.type === 'locked' && !isLocked && (
+                                <Tooltip label={nextAction.reason} hasArrow placement="top">
+                                  <Badge
+                                    fontSize="10px"
+                                    h="22px"
+                                    px={1.5}
+                                    colorScheme="gray"
+                                    display="inline-flex"
+                                    alignItems="center"
+                                    gap={1}
+                                    cursor="not-allowed"
+                                  >
+                                    <FaLock size={8} /> {nextAction.label}
+                                  </Badge>
+                                </Tooltip>
+                              )}
+                            </HStack>
+                          </Flex>
+                        </Box>
                       );
                     })}
                   </VStack>

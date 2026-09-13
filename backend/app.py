@@ -478,6 +478,9 @@ def get_members():
 def add_member():
     try:
         data = request.get_json()
+        sub_deps_raw = data.get('sub_departments')
+        sub_deps_str = json.dumps(sub_deps_raw) if isinstance(sub_deps_raw, list) else sub_deps_raw
+
         new_member = Member(
             name=data['name'],
             MSSV=data['MSSV'],
@@ -486,12 +489,12 @@ def add_member():
             specialist=data.get('specialist'),
             major_class=data.get('major_class'),
             student_type=data.get('student_type'),
-            sub_departments=data.get('sub_departments'),
+            sub_departments=sub_deps_str,
             sub_department_states=data.get('sub_department_states', '{}') if isinstance(data.get('sub_department_states'), str) else json.dumps(data.get('sub_department_states', {})),
             linkCV=data.get('linkCV'),
             # Members added manually by an admin are assumed already vetted,
-            # so they skip the "Chờ duyệt" screening step used by public /api/apply submissions.
-            state='Đậu vòng đơn',
+            # so they default to 'Đậu vòng đơn' if not specified.
+            state=data.get('state', 'Đậu vòng đơn'),
             note=data.get('note')
         )
         db.session.add(new_member)
@@ -538,7 +541,10 @@ def edit_member(id):
             member.specialist = data.get('specialist', member.specialist)
             member.major_class = data.get('major_class', member.major_class)
             member.student_type = data.get('student_type', member.student_type)
-            member.sub_departments = data.get('sub_departments', member.sub_departments)
+            if 'sub_departments' in data:
+                sub_deps = data['sub_departments']
+                member.sub_departments = json.dumps(sub_deps) if isinstance(sub_deps, list) else str(sub_deps)
+
 
             if 'sub_department_states' in data:
                 sub_val = data['sub_department_states']
@@ -592,29 +598,28 @@ def edit_member(id):
             if 'state' in data:
                 member.state = data['state']
 
-            # Auto-initialize sub_department_states for registered sub_departments when passing screening
-            if member.state == 'Đậu vòng đơn':
-                if member.sub_departments:
-                    try:
-                        sub_list = json.loads(member.sub_departments) if isinstance(member.sub_departments, str) else member.sub_departments
-                        if isinstance(sub_list, list) and sub_list:
-                            current_states = {}
-                            if member.sub_department_states:
-                                try:
-                                    current_states = json.loads(member.sub_department_states) if isinstance(member.sub_department_states, str) else member.sub_department_states
-                                    if not isinstance(current_states, dict):
-                                        current_states = {}
-                                except Exception:
+            # Auto-initialize sub_department_states for registered sub_departments when passing screening (main_level >= 1)
+            if main_level >= 1 and member.sub_departments:
+                try:
+                    sub_list = json.loads(member.sub_departments) if isinstance(member.sub_departments, str) else member.sub_departments
+                    if isinstance(sub_list, list) and sub_list:
+                        current_states = {}
+                        if member.sub_department_states:
+                            try:
+                                current_states = json.loads(member.sub_department_states) if isinstance(member.sub_department_states, str) else member.sub_department_states
+                                if not isinstance(current_states, dict):
                                     current_states = {}
-                            needs_update = False
-                            for sd in sub_list:
-                                if sd not in current_states:
-                                    current_states[sd] = 'Chờ duyệt'
-                                    needs_update = True
-                            if needs_update:
-                                member.sub_department_states = json.dumps(current_states)
-                    except Exception as e:
-                        logging.warning(f"Error auto-initializing sub_department_states: {e}")
+                            except Exception:
+                                current_states = {}
+                        needs_update = False
+                        for sd in sub_list:
+                            if sd not in current_states:
+                                current_states[sd] = 'Chờ duyệt'
+                                needs_update = True
+                        if needs_update:
+                            member.sub_department_states = json.dumps(current_states)
+                except Exception as e:
+                    logging.warning(f"Error auto-initializing sub_department_states: {e}")
 
             # First time this candidate passes screening: mint their
             # confirmation link + one-time password. Re-approving later

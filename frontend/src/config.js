@@ -234,5 +234,75 @@ export function getMemberActiveInterviewSessions(member) {
   return sessions;
 }
 
+/**
+ * Determines the next sequential advance action for a sub-department based on main state and current sub state.
+ */
+export function getSubDeptNextAction(mainState, currentSubState = 'Chờ duyệt') {
+  const mainLevel = MAIN_STATE_ORDER[mainState] ?? 0;
+
+  // Gate 1: main hasn't passed screening
+  if (mainLevel < 1) {
+    return { type: 'locked', label: 'Chờ mảng chính', reason: 'Mảng chính chưa đậu vòng đơn' };
+  }
+
+  // Gate 1 passed:
+  if (currentSubState === 'Chờ duyệt') {
+    return {
+      type: 'screen',
+      actions: [
+        { label: 'Duyệt đậu', nextState: 'Đậu vòng đơn', colorScheme: 'info' },
+        { label: 'Trượt', nextState: 'Trượt vòng đơn', colorScheme: 'red', variant: 'ghost' },
+      ],
+    };
+  }
+
+  if (currentSubState === 'Trượt vòng đơn') {
+    return { type: 'finished', label: 'Trượt vòng đơn' };
+  }
+
+  if (currentSubState === 'Đậu vòng đơn') {
+    if (mainLevel < 6) {
+      return { type: 'locked', label: 'Chờ PV chính', reason: 'Mảng chính chưa hoàn thành phỏng vấn' };
+    }
+    return {
+      type: 'advance',
+      label: 'Gọi PV',
+      nextState: 'Gọi PV',
+      colorScheme: 'warning',
+    };
+  }
+
+  if (currentSubState === 'Gọi PV') {
+    return {
+      type: 'advance',
+      label: 'Bắt đầu PV',
+      nextState: 'Đang phỏng vấn',
+      colorScheme: 'secondary',
+    };
+  }
+
+  if (currentSubState === 'Đang phỏng vấn') {
+    return {
+      type: 'advance',
+      label: 'Kết thúc PV',
+      nextState: 'Đã phỏng vấn',
+      colorScheme: 'success',
+    };
+  }
+
+  if (currentSubState === 'Đã phỏng vấn') {
+    return {
+      type: 'evaluate',
+      actions: [
+        { label: 'Đạt', nextState: 'Đạt', colorScheme: 'primary' },
+        { label: 'K.Đạt', nextState: 'Không đạt', colorScheme: 'red', variant: 'outline' },
+      ],
+    };
+  }
+
+  return { type: 'finished', label: currentSubState };
+}
+
+
 
 

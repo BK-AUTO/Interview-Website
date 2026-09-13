@@ -37,6 +37,7 @@ import {
   FaEye,
   FaChevronDown,
   FaLock,
+  FaArrowRight,
 } from 'react-icons/fa';
 import api from '../api/axios';
 import ConfirmCredentialsModal from './ConfirmCredentialsModal';
@@ -51,6 +52,7 @@ import {
   isSubDeptInterviewLocked,
   parseSubDepartments,
   parseSubDepartmentStates,
+  getSubDeptNextAction,
 } from '../config';
 
 const STATE_BADGE_PROPS = {
@@ -430,9 +432,9 @@ const ApprovedCandidates = ({ members, setMembers }) => {
                       </Td>
 
                       {/* Sub-Department Flow State & Actions */}
-                      <Td py={3} maxW="270px">
+                      <Td py={3} minW="260px" maxW="340px">
                         {subDepts.length > 0 ? (
-                          <VStack align="flex-start" spacing={1.5}>
+                          <VStack align="flex-start" spacing={2}>
                             {subDepts.map((sub) => {
                               const currentSubState = subStates[sub] || 'Chờ duyệt';
                               const isLocked = isSubDeptLocked(member.state);
@@ -442,95 +444,190 @@ const ApprovedCandidates = ({ members, setMembers }) => {
                                 color: 'gray.700',
                                 borderColor: 'gray.200',
                               };
+                              const nextAction = getSubDeptNextAction(member.state, currentSubState);
 
                               return (
-                                <HStack key={sub} spacing={1.5} flexWrap="wrap" justify="space-between" w="full">
-                                  <Text fontSize="xs" fontWeight="medium" color="gray.700">
-                                    {DEPARTMENT_LABELS[sub] || sub}:
-                                  </Text>
+                                <Box key={sub} w="full">
+                                  <Flex align="center" justify="space-between" gap={2} flexWrap="wrap">
+                                    <HStack spacing={1.5} align="center">
+                                      <Text fontSize="xs" fontWeight="semibold" color="gray.700" whiteSpace="nowrap">
+                                        {DEPARTMENT_LABELS[sub] || sub}:
+                                      </Text>
 
-                                  {isLocked ? (
-                                    <Tooltip
-                                      label={`Mảng chính (${DEPARTMENT_LABELS[member.specialist] || member.specialist}) chưa đậu vòng đơn`}
-                                      hasArrow
-                                      placement="top"
-                                    >
-                                      <Badge
-                                        size="xs"
-                                        h="20px"
-                                        px={2}
-                                        fontSize="10px"
-                                        bg="gray.100"
-                                        color="gray.400"
-                                        borderWidth="1px"
-                                        borderColor="gray.200"
-                                        display="inline-flex"
-                                        alignItems="center"
-                                        gap={1}
-                                        cursor="not-allowed"
-                                      >
-                                        <FaLock size={8} /> {currentSubState}
-                                      </Badge>
-                                    </Tooltip>
-                                  ) : (
-                                    <Menu size="xs" isLazy>
-                                      <MenuButton
-                                        as={Button}
-                                        size="xs"
-                                        h="20px"
-                                        px={2}
-                                        fontSize="10px"
-                                        bg={subStyle.bg}
-                                        color={subStyle.color}
-                                        borderWidth="1px"
-                                        borderColor={subStyle.borderColor}
-                                        rightIcon={<FaChevronDown size={8} />}
-                                      >
-                                        {currentSubState}
-                                      </MenuButton>
-                                      <MenuList fontSize="xs" minW="160px" zIndex={10}>
-                                        <MenuOptionGroup title="Vòng đơn" type="radio" value={currentSubState}>
-                                          {SUB_SCREENING_STATES.map((st) => (
-                                            <MenuItem
-                                              key={st}
-                                              onClick={() => handleUpdateSubDeptState(member, sub, st)}
-                                              fontWeight={currentSubState === st ? 'bold' : 'normal'}
-                                              bg={currentSubState === st ? 'primary.50' : 'transparent'}
-                                              color={currentSubState === st ? 'primary.600' : 'gray.800'}
-                                            >
-                                              {st}
-                                            </MenuItem>
-                                          ))}
-                                        </MenuOptionGroup>
-                                        <MenuDivider />
-                                        <MenuOptionGroup
-                                          title={isInterviewLocked ? "Phỏng vấn (🔒 Chờ mảng chính)" : "Vòng phỏng vấn"}
-                                          type="radio"
-                                          value={currentSubState}
+                                      {isLocked ? (
+                                        <Tooltip
+                                          label={`Mảng chính (${DEPARTMENT_LABELS[member.specialist] || member.specialist}) chưa đậu vòng đơn`}
+                                          hasArrow
+                                          placement="top"
                                         >
-                                          {SUB_INTERVIEW_STATES.map((st) => {
-                                            const disabled = isInterviewLocked || currentSubState === 'Trượt vòng đơn';
-                                            return (
-                                              <MenuItem
-                                                key={st}
-                                                isDisabled={disabled}
-                                                onClick={() => !disabled && handleUpdateSubDeptState(member, sub, st)}
-                                                fontWeight={currentSubState === st ? 'bold' : 'normal'}
-                                                bg={currentSubState === st ? 'primary.50' : 'transparent'}
-                                                color={currentSubState === st ? 'primary.600' : (disabled ? 'gray.400' : 'gray.800')}
-                                              >
-                                                <HStack justify="space-between" w="full">
-                                                  <Text>{st}</Text>
-                                                  {disabled && <FaLock size={8} color="gray" />}
-                                                </HStack>
-                                              </MenuItem>
-                                            );
-                                          })}
-                                        </MenuOptionGroup>
-                                      </MenuList>
-                                    </Menu>
-                                  )}
-                                </HStack>
+                                          <Badge
+                                            fontSize="10px"
+                                            px={1.5}
+                                            py={0.5}
+                                            bg="gray.100"
+                                            color="gray.400"
+                                            borderWidth="1px"
+                                            borderColor="gray.200"
+                                            borderRadius="md"
+                                            display="inline-flex"
+                                            alignItems="center"
+                                            gap={1}
+                                            cursor="not-allowed"
+                                          >
+                                            <FaLock size={8} /> {currentSubState}
+                                          </Badge>
+                                        </Tooltip>
+                                      ) : (
+                                        <Menu size="xs" isLazy>
+                                          <MenuButton
+                                            as={Badge}
+                                            cursor="pointer"
+                                            fontSize="10px"
+                                            px={1.5}
+                                            py={0.5}
+                                            borderRadius="md"
+                                            bg={subStyle.bg}
+                                            color={subStyle.color}
+                                            borderWidth="1px"
+                                            borderColor={subStyle.borderColor}
+                                            display="inline-flex"
+                                            alignItems="center"
+                                            gap={0.5}
+                                            title="Nhấn để đổi trạng thái tuỳ chọn"
+                                          >
+                                            {currentSubState} ▾
+                                          </MenuButton>
+                                          <MenuList fontSize="xs" minW="160px" zIndex={10}>
+                                            <MenuOptionGroup title="Vòng đơn" type="radio" value={currentSubState}>
+                                              {SUB_SCREENING_STATES.map((st) => (
+                                                <MenuItem
+                                                  key={st}
+                                                  onClick={() => handleUpdateSubDeptState(member, sub, st)}
+                                                  fontWeight={currentSubState === st ? 'bold' : 'normal'}
+                                                  bg={currentSubState === st ? 'primary.50' : 'transparent'}
+                                                  color={currentSubState === st ? 'primary.600' : 'gray.800'}
+                                                >
+                                                  {st}
+                                                </MenuItem>
+                                              ))}
+                                            </MenuOptionGroup>
+                                            <MenuDivider />
+                                            <MenuOptionGroup
+                                              title={isInterviewLocked ? "Phỏng vấn (🔒 Chờ mảng chính)" : "Vòng phỏng vấn"}
+                                              type="radio"
+                                              value={currentSubState}
+                                            >
+                                              {SUB_INTERVIEW_STATES.map((st) => {
+                                                const disabled = isInterviewLocked || currentSubState === 'Trượt vòng đơn';
+                                                return (
+                                                  <MenuItem
+                                                    key={st}
+                                                    isDisabled={disabled}
+                                                    onClick={() => !disabled && handleUpdateSubDeptState(member, sub, st)}
+                                                    fontWeight={currentSubState === st ? 'bold' : 'normal'}
+                                                    bg={currentSubState === st ? 'primary.50' : 'transparent'}
+                                                    color={currentSubState === st ? 'primary.600' : (disabled ? 'gray.400' : 'gray.800')}
+                                                  >
+                                                    <HStack justify="space-between" w="full">
+                                                      <Text>{st}</Text>
+                                                      {disabled && <FaLock size={8} color="gray" />}
+                                                    </HStack>
+                                                  </MenuItem>
+                                                );
+                                              })}
+                                            </MenuOptionGroup>
+                                          </MenuList>
+                                        </Menu>
+                                      )}
+                                    </HStack>
+
+                                    {/* Sequential advance buttons matching main flow */}
+                                    <HStack spacing={1} align="center">
+                                      {nextAction.type === 'screen' && (
+                                        <>
+                                          <Button
+                                            size="xs"
+                                            h="22px"
+                                            fontSize="11px"
+                                            px={2}
+                                            colorScheme="info"
+                                            onClick={() => handleUpdateSubDeptState(member, sub, 'Đậu vòng đơn')}
+                                          >
+                                            Duyệt đậu
+                                          </Button>
+                                          <Button
+                                            size="xs"
+                                            h="22px"
+                                            fontSize="11px"
+                                            px={2}
+                                            colorScheme="red"
+                                            variant="ghost"
+                                            onClick={() => handleUpdateSubDeptState(member, sub, 'Trượt vòng đơn')}
+                                          >
+                                            Trượt
+                                          </Button>
+                                        </>
+                                      )}
+
+                                      {nextAction.type === 'advance' && (
+                                        <Button
+                                          size="xs"
+                                          h="22px"
+                                          fontSize="11px"
+                                          px={2}
+                                          colorScheme={nextAction.colorScheme}
+                                          rightIcon={<FaArrowRight />}
+                                          onClick={() => handleUpdateSubDeptState(member, sub, nextAction.nextState)}
+                                        >
+                                          {nextAction.label}
+                                        </Button>
+                                      )}
+
+                                      {nextAction.type === 'evaluate' && (
+                                        <>
+                                          <Button
+                                            size="xs"
+                                            h="22px"
+                                            fontSize="11px"
+                                            px={2}
+                                            colorScheme="primary"
+                                            onClick={() => handleUpdateSubDeptState(member, sub, 'Đạt')}
+                                          >
+                                            Đạt
+                                          </Button>
+                                          <Button
+                                            size="xs"
+                                            h="22px"
+                                            fontSize="11px"
+                                            px={2}
+                                            colorScheme="red"
+                                            variant="outline"
+                                            onClick={() => handleUpdateSubDeptState(member, sub, 'Không đạt')}
+                                          >
+                                            K.Đạt
+                                          </Button>
+                                        </>
+                                      )}
+
+                                      {nextAction.type === 'locked' && !isLocked && (
+                                        <Tooltip label={nextAction.reason} hasArrow placement="top">
+                                          <Badge
+                                            fontSize="10px"
+                                            h="20px"
+                                            px={1.5}
+                                            colorScheme="gray"
+                                            display="inline-flex"
+                                            alignItems="center"
+                                            gap={1}
+                                            cursor="not-allowed"
+                                          >
+                                            <FaLock size={8} /> {nextAction.label}
+                                          </Badge>
+                                        </Tooltip>
+                                      )}
+                                    </HStack>
+                                  </Flex>
+                                </Box>
                               );
                             })}
                           </VStack>
