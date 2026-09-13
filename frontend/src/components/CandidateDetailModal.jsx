@@ -42,6 +42,9 @@ import {
   FaCheckCircle,
   FaInfoCircle,
   FaArrowRight,
+  FaKey,
+  FaCopy,
+  FaLink,
 } from 'react-icons/fa';
 import api from '../api/axios';
 import {
@@ -382,6 +385,95 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
                 <Text fontSize="xs" color="gray.700" whiteSpace="pre-wrap">
                   {liveCandidate.note}
                 </Text>
+              </Box>
+            )}
+
+            {/* Thông tin link xác nhận và mã 6 số */}
+            {(liveCandidate.confirm_token || liveCandidate.confirm_password) && (
+              <Box mt={3} p={3.5} borderRadius="lg" bg="teal.50" borderWidth="1px" borderColor="teal.200">
+                <HStack justify="space-between" mb={2.5}>
+                  <HStack spacing={2}>
+                    <FaKey color="#0d9488" size={13} />
+                    <Text fontSize="xs" fontWeight="bold" color="teal.800" textTransform="uppercase" letterSpacing="wide">
+                      Xác nhận phỏng vấn & Mã 6 số
+                    </Text>
+                  </HStack>
+                  <Badge
+                    fontSize="11px"
+                    colorScheme={liveCandidate.confirmed_at ? 'green' : liveCandidate.confirm_token ? 'blue' : 'gray'}
+                    px={2}
+                    py={0.5}
+                    borderRadius="md"
+                  >
+                    {liveCandidate.confirmed_at ? `Đã xác nhận (${liveCandidate.confirmed_at})` : 'Chờ xác nhận'}
+                  </Badge>
+                </HStack>
+
+                <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={2.5}>
+                  <Box bg="white" p={2.5} borderRadius="md" borderWidth="1px" borderColor="teal.100">
+                    <Text fontSize="11px" color="gray.500" mb={1} fontWeight="medium">Link xác nhận cá nhân</Text>
+                    <HStack spacing={2} justify="space-between">
+                      <Text fontSize="xs" color="teal.700" isTruncated maxW="180px">
+                        {liveCandidate.confirm_url || (liveCandidate.confirm_token ? `${window.location.origin}/confirm/${liveCandidate.confirm_token}` : 'Chưa cấp')}
+                      </Text>
+                      {liveCandidate.confirm_token && (
+                        <HStack spacing={1}>
+                          <Tooltip label="Sao chép link xác nhận" hasArrow>
+                            <IconButton
+                              size="xs"
+                              aria-label="Copy link"
+                              icon={<FaCopy />}
+                              variant="ghost"
+                              colorScheme="teal"
+                              onClick={() => {
+                                const linkToCopy = liveCandidate.confirm_url || `${window.location.origin}/confirm/${liveCandidate.confirm_token}`;
+                                navigator.clipboard.writeText(linkToCopy);
+                                toast({ title: 'Đã sao chép link xác nhận', status: 'success', duration: 1800, isClosable: true });
+                              }}
+                            />
+                          </Tooltip>
+                          <Tooltip label="Mở trang xác nhận" hasArrow>
+                            <IconButton
+                              as="a"
+                              href={liveCandidate.confirm_url || `${window.location.origin}/confirm/${liveCandidate.confirm_token}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              size="xs"
+                              aria-label="Mở link"
+                              icon={<FaExternalLinkAlt />}
+                              variant="ghost"
+                              colorScheme="teal"
+                            />
+                          </Tooltip>
+                        </HStack>
+                      )}
+                    </HStack>
+                  </Box>
+
+                  <Box bg="white" p={2.5} borderRadius="md" borderWidth="1px" borderColor="teal.100">
+                    <Text fontSize="11px" color="gray.500" mb={1} fontWeight="medium">Mã xác nhận (6 số raw)</Text>
+                    <HStack spacing={2} justify="space-between">
+                      <Text fontSize="md" fontWeight="bold" fontFamily="monospace" letterSpacing="widest" color="teal.800">
+                        {liveCandidate.confirm_password || 'Chưa tạo'}
+                      </Text>
+                      {liveCandidate.confirm_password && (
+                        <Tooltip label="Sao chép mã 6 số" hasArrow>
+                          <IconButton
+                            size="xs"
+                            aria-label="Copy mã xác nhận"
+                            icon={<FaCopy />}
+                            variant="ghost"
+                            colorScheme="teal"
+                            onClick={() => {
+                              navigator.clipboard.writeText(liveCandidate.confirm_password);
+                              toast({ title: 'Đã sao chép mã 6 số', status: 'success', duration: 1800, isClosable: true });
+                            }}
+                          />
+                        </Tooltip>
+                      )}
+                    </HStack>
+                  </Box>
+                </SimpleGrid>
               </Box>
             )}
           </Box>
