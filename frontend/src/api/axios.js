@@ -18,15 +18,13 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  response => response,
-  error => {
-    console.error('API Error:', error.response?.data || error.message || error);
-    if (error.message === 'Network Error') {
-      console.error('This appears to be a CORS or network connectivity issue');
-    }
+  (response) => response,
+  (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
-      window.location.reload();
+      window.dispatchEvent(new CustomEvent('auth:expired'));
+    } else if (error.message === 'Network Error') {
+      console.error('This appears to be a CORS or network connectivity issue');
     }
     return Promise.reject(error);
   }

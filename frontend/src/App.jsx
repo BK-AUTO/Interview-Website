@@ -30,7 +30,6 @@ import Checkin from './components/Checkin';
 import CheckinQr from './components/CheckinQr';
 import api from './api/axios';
 import { BASE_URL } from './config';
-import { io } from 'socket.io-client';
 
 const TAB_TITLES = [
   { title: 'Duyệt hồ sơ vòng đơn', subtitle: 'Sàng lọc hồ sơ ứng viên đăng ký tuyển thành viên' },
@@ -41,12 +40,48 @@ const TAB_TITLES = [
   { title: 'Cấu hình & Website', subtitle: 'Thông số hệ thống và liên kết dịch vụ' },
 ];
 
+// Validates JWT structure and expiry timestamp synchronously without network delay
+function isValidJwtToken(token) {
+  if (!token || typeof token !== 'string') return false;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return false;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(window.atob(base64));
+    if (payload.exp && Date.now() >= payload.exp * 1000) {
+      return false; // Token expired
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function App() {
   const [members, setMembers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
   const [isSidebarMinimized, setIsSidebarMinimized] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Synchronously compute initial auth state to completely eliminate the 1s UI flash
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenFromUrl = params.get('token');
+    if (tokenFromUrl && isValidJwtToken(tokenFromUrl)) {
+      localStorage.setItem('token', tokenFromUrl);
+      window.history.replaceState({}, '', window.location.pathname);
+      return true;
+    }
+    const storedToken = localStorage.getItem('token');
+    if (storedToken) {
+      if (isValidJwtToken(storedToken)) {
+        return true;
+      }
+      localStorage.removeItem('token');
+    }
+    return false;
+  });
   const [socketConnected, setSocketConnected] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -55,18 +90,13 @@ function App() {
   const { isOpen: isCheckinQrOpen, onOpen: onCheckinQrOpen, onClose: onCheckinQrClose } = useDisclosure();
 
   const toast = useToast();
-  const socketRef = useRef(null);
+  const eventSourceRef = useRef(null);
   const isDesktop = useBreakpointValue({ base: false, lg: true });
 
-  // Authentik OIDC redirect callback handler (?token=<jwt>)
+  // Authentik OIDC redirect error handler and 401 session expiry listener
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const tokenFromUrl = params.get('token');
-    if (tokenFromUrl) {
-      localStorage.setItem('token', tokenFromUrl);
-      window.history.replaceState({}, '', window.location.pathname);
-      setIsAuthenticated(true);
-    } else if (params.get('auth_error')) {
+    if (params.get('auth_error')) {
       toast({
         title: 'Đăng nhập thất bại',
         description: 'Không thể xác thực với Authentik SSO, vui lòng thử lại.',
@@ -75,9 +105,22 @@ function App() {
         isClosable: true,
       });
       window.history.replaceState({}, '', window.location.pathname);
-    } else if (localStorage.getItem('token')) {
-      setIsAuthenticated(true);
     }
+
+    const handleAuthExpired = () => {
+      setIsAuthenticated(false);
+      setCurrentUser(null);
+      toast({
+        title: 'Phiên đăng nhập đã hết hạn',
+        description: 'Vui lòng đăng nhập lại để tiếp tục.',
+        status: 'warning',
+        duration: 3500,
+        isClosable: true,
+      });
+    };
+
+    window.addEventListener('auth:expired', handleAuthExpired);
+    return () => window.removeEventListener('auth:expired', handleAuthExpired);
   }, [toast]);
 
   // Fetch all members via REST
@@ -96,138 +139,196 @@ function App() {
     }
   };
 
-  // Initialize WebSocket connection when authenticated
+  // Initialize Native Server-Sent Events (SSE) connection when authenticated
   useEffect(() => {
     if (isAuthenticated) {
       try {
-        socketRef.current = io(BASE_URL, {
-          reconnectionAttempts: 5,
-          timeout: 10000,
-          transports: ['websocket', 'polling'],
-        });
-        const socket = socketRef.current;
+        const token = localStorage.getItem('token');
+        const sseUrl = `${BASE_URL}/api/events${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+        const es = new EventSource(sseUrl);
+        eventSourceRef.current = es;
 
-        socket.on('connect', () => {
+        es.onopen = () => {
           setSocketConnected(true);
-          socket.emit('request_update');
-        });
+        };
 
-        socket.on('disconnect', () => {
+        es.onerror = () => {
           setSocketConnected(false);
+        };
+
+        es.addEventListener('connected', () => {
+          setSocketConnected(true);
         });
 
-        socket.on('connect_error', (error) => {
-          setSocketConnected(false);
-          console.error('Socket error:', error);
+        es.addEventListener('member_added', (e) => {
+          try {
+            const newMember = JSON.parse(e.data);
+            setMembers((prev) => [...prev, newMember]);
+            window.dispatchEvent(new CustomEvent('app:data-updated'));
+            toast({
+              title: 'Hồ sơ mới nộp',
+              description: `${newMember.name} vừa nộp đơn ứng tuyển`,
+              status: 'info',
+              duration: 3500,
+              isClosable: true,
+            });
+          } catch (err) {
+            console.error('Error parsing SSE member_added:', err);
+          }
         });
 
-        socket.on('member_added', (newMember) => {
-          setMembers((prev) => [...prev, newMember]);
-          toast({
-            title: 'Hồ sơ mới nộp',
-            description: `${newMember.name} vừa nộp đơn ứng tuyển`,
-            status: 'info',
-            duration: 3500,
-            isClosable: true,
-          });
+        es.addEventListener('member_edited', (e) => {
+          try {
+            const updatedMember = JSON.parse(e.data);
+            setMembers((prev) => prev.map((m) => (m.id === updatedMember.id ? updatedMember : m)));
+            window.dispatchEvent(new CustomEvent('app:data-updated'));
+          } catch (err) {
+            console.error('Error parsing SSE member_edited:', err);
+          }
         });
 
-        socket.on('member_edited', (updatedMember) => {
-          setMembers((prev) => prev.map((m) => (m.id === updatedMember.id ? updatedMember : m)));
+        es.addEventListener('member_deleted', (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            setMembers((prev) => prev.filter((m) => m.id !== data.id));
+            window.dispatchEvent(new CustomEvent('app:data-updated'));
+          } catch (err) {
+            console.error('Error parsing SSE member_deleted:', err);
+          }
         });
 
-        socket.on('member_deleted', (data) => {
-          setMembers((prev) => prev.filter((m) => m.id !== data.id));
+        es.addEventListener('member_checked_in', (e) => {
+          try {
+            const checkedInMember = JSON.parse(e.data);
+            setMembers((prev) => prev.map((m) => (m.id === checkedInMember.id ? checkedInMember : m)));
+            window.dispatchEvent(new CustomEvent('app:data-updated'));
+            toast({
+              title: 'Ứng viên Check-in',
+              description: `${checkedInMember.name} đã check-in thành công`,
+              status: 'success',
+              duration: 3000,
+              isClosable: true,
+            });
+          } catch (err) {
+            console.error('Error parsing SSE member_checked_in:', err);
+          }
         });
 
-        socket.on('member_checked_in', (checkedInMember) => {
-          setMembers((prev) => prev.map((m) => (m.id === checkedInMember.id ? checkedInMember : m)));
-          toast({
-            title: 'Ứng viên Check-in',
-            description: `${checkedInMember.name} đã check-in thành công`,
-            status: 'success',
-            duration: 3000,
-            isClosable: true,
-          });
+        es.addEventListener('member_interview_called', (e) => {
+          try {
+            const interviewMember = JSON.parse(e.data);
+            setMembers((prev) => prev.map((m) => (m.id === interviewMember.id ? interviewMember : m)));
+            window.dispatchEvent(new CustomEvent('app:data-updated'));
+            toast({
+              title: 'Gọi phỏng vấn',
+              description: `${interviewMember.name} đã được gọi vào phòng phỏng vấn`,
+              status: 'warning',
+              duration: 3500,
+              isClosable: true,
+              position: 'top',
+            });
+          } catch (err) {
+            console.error('Error parsing SSE member_interview_called:', err);
+          }
         });
 
-        socket.on('member_interview_called', (interviewMember) => {
-          setMembers((prev) => prev.map((m) => (m.id === interviewMember.id ? interviewMember : m)));
-          toast({
-            title: 'Gọi phỏng vấn',
-            description: `${interviewMember.name} đã được gọi vào phòng phỏng vấn`,
-            status: 'warning',
-            duration: 3500,
-            isClosable: true,
-            position: 'top',
-          });
+        es.addEventListener('member_interview_started', (e) => {
+          try {
+            const interviewMember = JSON.parse(e.data);
+            setMembers((prev) => prev.map((m) => (m.id === interviewMember.id ? interviewMember : m)));
+            window.dispatchEvent(new CustomEvent('app:data-updated'));
+            toast({
+              title: 'Phỏng vấn bắt đầu',
+              description: `${interviewMember.name} (${interviewMember.specialist}) đang phỏng vấn`,
+              status: 'warning',
+              duration: 3000,
+              isClosable: true,
+              position: 'top',
+            });
+          } catch (err) {
+            console.error('Error parsing SSE member_interview_started:', err);
+          }
         });
 
-        socket.on('member_interview_started', (interviewMember) => {
-          setMembers((prev) => prev.map((m) => (m.id === interviewMember.id ? interviewMember : m)));
-          toast({
-            title: 'Phỏng vấn bắt đầu',
-            description: `${interviewMember.name} (${interviewMember.specialist}) đang phỏng vấn`,
-            status: 'warning',
-            duration: 3000,
-            isClosable: true,
-            position: 'top',
-          });
+        es.addEventListener('member_interview_ended', (e) => {
+          try {
+            const interviewEndedMember = JSON.parse(e.data);
+            setMembers((prev) => prev.map((m) => (m.id === interviewEndedMember.id ? interviewEndedMember : m)));
+            window.dispatchEvent(new CustomEvent('app:data-updated'));
+            toast({
+              title: 'Phỏng vấn hoàn thành',
+              description: `${interviewEndedMember.name} đã kết thúc lượt phỏng vấn`,
+              status: 'success',
+              duration: 3000,
+              isClosable: true,
+            });
+          } catch (err) {
+            console.error('Error parsing SSE member_interview_ended:', err);
+          }
         });
 
-        socket.on('member_interview_ended', (interviewEndedMember) => {
-          setMembers((prev) => prev.map((m) => (m.id === interviewEndedMember.id ? interviewEndedMember : m)));
-          toast({
-            title: 'Phỏng vấn hoàn thành',
-            description: `${interviewEndedMember.name} đã kết thúc lượt phỏng vấn`,
-            status: 'success',
-            duration: 3000,
-            isClosable: true,
-          });
+        es.addEventListener('member_screening_passed', (e) => {
+          try {
+            const member = JSON.parse(e.data);
+            setMembers((prev) => prev.map((m) => (m.id === member.id ? member : m)));
+            window.dispatchEvent(new CustomEvent('app:data-updated'));
+          } catch (err) {
+            console.error('Error parsing SSE member_screening_passed:', err);
+          }
         });
 
-        socket.on('member_screening_passed', (member) => {
-          setMembers((prev) => prev.map((m) => (m.id === member.id ? member : m)));
+        es.addEventListener('member_screening_failed', (e) => {
+          try {
+            const member = JSON.parse(e.data);
+            setMembers((prev) => prev.map((m) => (m.id === member.id ? member : m)));
+            window.dispatchEvent(new CustomEvent('app:data-updated'));
+          } catch (err) {
+            console.error('Error parsing SSE member_screening_failed:', err);
+          }
         });
 
-        socket.on('member_screening_failed', (member) => {
-          setMembers((prev) => prev.map((m) => (m.id === member.id ? member : m)));
+        es.addEventListener('member_confirmed', (e) => {
+          try {
+            const member = JSON.parse(e.data);
+            setMembers((prev) => prev.map((m) => (m.id === member.id ? member : m)));
+            window.dispatchEvent(new CustomEvent('app:data-updated'));
+            toast({
+              title: 'Ứng viên xác nhận tham gia',
+              description: `${member.name} đã xác nhận lịch phỏng vấn`,
+              status: 'success',
+              duration: 3500,
+              isClosable: true,
+            });
+          } catch (err) {
+            console.error('Error parsing SSE member_confirmed:', err);
+          }
         });
 
-        socket.on('member_confirmed', (member) => {
-          setMembers((prev) => prev.map((m) => (m.id === member.id ? member : m)));
-          toast({
-            title: 'Ứng viên xác nhận tham gia',
-            description: `${member.name} đã xác nhận lịch phỏng vấn`,
-            status: 'success',
-            duration: 3500,
-            isClosable: true,
-          });
-        });
-
-        socket.on('member_reschedule_requested', (member) => {
-          setMembers((prev) => prev.map((m) => (m.id === member.id ? member : m)));
-          toast({
-            title: 'Yêu cầu đổi lịch phỏng vấn',
-            description: `${member.name} vừa gửi yêu cầu đổi lịch`,
-            status: 'warning',
-            duration: 4000,
-            isClosable: true,
-          });
-        });
-
-        socket.on('members_list', (membersList) => {
-          setMembers(membersList);
+        es.addEventListener('member_reschedule_requested', (e) => {
+          try {
+            const member = JSON.parse(e.data);
+            setMembers((prev) => prev.map((m) => (m.id === member.id ? member : m)));
+            window.dispatchEvent(new CustomEvent('app:data-updated'));
+            toast({
+              title: 'Yêu cầu đổi lịch phỏng vấn',
+              description: `${member.name} vừa gửi yêu cầu đổi lịch`,
+              status: 'warning',
+              duration: 4000,
+              isClosable: true,
+            });
+          } catch (err) {
+            console.error('Error parsing SSE member_reschedule_requested:', err);
+          }
         });
 
         fetchMembers();
 
         return () => {
-          socket.disconnect();
-          socketRef.current = null;
+          es.close();
+          eventSourceRef.current = null;
         };
       } catch (error) {
-        console.error('Error setting up socket:', error);
+        console.error('Error setting up SSE EventSource:', error);
       }
     }
   }, [isAuthenticated, toast]);
@@ -343,9 +444,9 @@ function App() {
 
           {/* Right: Realtime status, Quick Check-in & Refresh */}
           <HStack spacing={3}>
-            {/* Live Socket Status */}
+            {/* Live SSE Status */}
             <Tooltip
-              label={socketConnected ? 'Kết nối realtime WebSocket đang hoạt động' : 'Mất kết nối realtime'}
+              label={socketConnected ? 'Kết nối realtime SSE đang hoạt động' : 'Mất kết nối realtime'}
               hasArrow
               bg="dark.800"
               color="white"
@@ -439,8 +540,8 @@ function App() {
       </Flex>
 
       {/* Global Check-in Modals */}
-      <Checkin isOpen={isCheckinOpen} onClose={onCheckinClose} />
-      <CheckinQr isOpen={isCheckinQrOpen} onClose={onCheckinQrClose} />
+      <Checkin isOpen={isCheckinOpen} onClose={onCheckinClose} setMembers={setMembers} />
+      <CheckinQr isOpen={isCheckinQrOpen} onClose={onCheckinQrClose} setMembers={setMembers} />
     </Flex>
   );
 }

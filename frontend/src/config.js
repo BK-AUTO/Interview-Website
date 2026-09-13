@@ -14,7 +14,7 @@ import {
 // - When specified via VITE_API_URL, use that explicit endpoint.
 // - In local development mode (`pnpm dev`), default to 'http://localhost:8091'.
 // - In production container behind Nginx, default to '' (same-origin relative path),
-//   which routes /api and /socket.io through Nginx reverse proxy without CORS or IP issues.
+//   which routes /api (including /api/events SSE) through Nginx reverse proxy without CORS or IP issues.
 export const BASE_URL = import.meta.env.VITE_API_URL !== undefined
   ? import.meta.env.VITE_API_URL
   : (import.meta.env.DEV ? 'http://localhost:8091' : '');
