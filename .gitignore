@@ -30,8 +30,8 @@ backend/.env
 frontend/.env
 backend/uploads/*
 *.db
-backend/instance/*.db
-instance/*.db
+*.db-wal
+*.db-shm
+backend/instance/*
+instance/*
 
-backend/__pycache__/app.cpython-312.pyc
-backend/__pycache__/app.cpython-39.pyc

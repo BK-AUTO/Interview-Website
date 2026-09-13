@@ -1,33 +1,28 @@
-from app import app, socketio, db
+from app import app, db
 import logging
 import os
 
-# Set up logging
-logging.basicConfig(level=logging.DEBUG,
-                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Set up production logging
+LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
-if __name__ == "__main__":
-    logger.info("Starting application with threading mode")
+# Ensure tables exist at startup
+with app.app_context():
     try:
-        # Make sure CORS is properly handled
-        from flask_cors import CORS
-        CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
-        
-        # Create database tables if they don't exist
-        with app.app_context():
-            # Recreate the database to ensure the new columns are present
-            # db.drop_all()  # This will drop all existing tables
-            db.create_all()
-            logger.info("Database tables created/updated successfully")
-        
-        socketio.run(
-            app,
-            host='0.0.0.0',
-            port=8091,
-            debug=False,
-            use_reloader=False,
-            allow_unsafe_werkzeug=True
-        )
+        db.create_all()
+        logger.info("Database initialized successfully with WAL optimizations")
     except Exception as e:
-        logger.error(f"Error starting the application: {e}")
+        logger.error(f"Error during database initialization: {e}")
+
+if __name__ == "__main__":
+    logger.info("Starting development server on port 8091")
+    app.run(
+        host='0.0.0.0',
+        port=8091,
+        debug=False,
+        threaded=True
+    )

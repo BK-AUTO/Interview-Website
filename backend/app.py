@@ -3,10 +3,11 @@ import re
 import secrets
 import uuid
 import json
+import queue
+import threading
 from dotenv import load_dotenv
 load_dotenv()
-from flask import Flask, jsonify, request, redirect, send_from_directory
-from flask_socketio import SocketIO, emit
+from flask import Flask, jsonify, request, redirect, send_from_directory, Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from datetime import datetime, timezone, timedelta
@@ -14,8 +15,9 @@ import logging
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import or_
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, get_jwt
+from sqlalchemy import or_, event
+from sqlalchemy.engine import Engine
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, get_jwt, decode_token
 from authlib.integrations.flask_client import OAuth
 
 app = Flask(__name__)
@@ -82,8 +84,53 @@ ALLOWED_CV_EXTENSIONS = {'pdf'}
 MAX_CV_SIZE_BYTES = 5 * 1024 * 1024  # 5MB, matches the limit enforced in RecruitmentForm.vue
 
 db = SQLAlchemy(app)
-# Use threading async_mode which is compatible with Python 3.12
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading', logger=True, engineio_logger=True)
+
+# --- High-Performance SQLite PRAGMAs (WAL Mode, Cache, Temp in RAM) ---
+@event.listens_for(Engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    if 'sqlite' in str(app.config.get('SQLALCHEMY_DATABASE_URI', '')):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode = WAL;")
+        cursor.execute("PRAGMA synchronous = NORMAL;")
+        cursor.execute("PRAGMA busy_timeout = 10000;")
+        cursor.execute("PRAGMA cache_size = -64000;")
+        cursor.execute("PRAGMA temp_store = MEMORY;")
+        cursor.execute("PRAGMA mmap_size = 268435456;")
+        cursor.close()
+
+# --- Lightweight Thread-safe SSE Broadcaster ---
+class MessageAnnouncer:
+    """Thread-safe Server-Sent Events broadcaster with automatic dead listener cleanup."""
+    def __init__(self):
+        self.listeners = []
+        self.lock = threading.Lock()
+
+    def listen(self):
+        q = queue.Queue(maxsize=100)
+        with self.lock:
+            self.listeners.append(q)
+        return q
+
+    def announce(self, event_name: str, data: dict):
+        formatted_data = json.dumps(data, ensure_ascii=False)
+        msg = f"event: {event_name}\ndata: {formatted_data}\n\n"
+        with self.lock:
+            dead_listeners = []
+            for q in self.listeners:
+                try:
+                    q.put_nowait(msg)
+                except queue.Full:
+                    dead_listeners.append(q)
+            for q in dead_listeners:
+                if q in self.listeners:
+                    self.listeners.remove(q)
+
+    def remove_listener(self, q):
+        with self.lock:
+            if q in self.listeners:
+                self.listeners.remove(q)
+
+announcer = MessageAnnouncer()
 
 # Enable CORS with more specific settings. More specific resource patterns
 # take precedence over the catch-all, so /api/apply gets its own allowlist.
@@ -116,9 +163,12 @@ if AUTHENTIK_ISSUER:
         client_kwargs={'scope': 'openid profile email'},
     )
 
-# Configure detailed logging
-logging.basicConfig(level=logging.DEBUG,
-                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Configure production-optimized logging
+LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # Helper function to get GMT+7 time
 def get_gmt7_time():
@@ -150,19 +200,19 @@ class Member(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     MSSV = db.Column(db.String(100), nullable=False, unique=True)  # Increased size for MSSV / external key
-    email = db.Column(db.String(100))
+    email = db.Column(db.String(100), index=True)
     phone = db.Column(db.String(20))
-    specialist = db.Column(db.String(100))
+    specialist = db.Column(db.String(100), index=True)
     major_class = db.Column(db.String(200))
     student_type = db.Column(db.String(20))  # 'hust' / 'external'
     sub_departments = db.Column(db.String(300))  # JSON array string, e.g. '["electrical","simulation"]'
     linkCV = db.Column(db.String(500))  # Increased size for long URLs
     checkin_time = db.Column(db.String(100), nullable=True)
-    state = db.Column(db.String(100), nullable=True, default='Chưa checkin')
+    state = db.Column(db.String(100), nullable=True, default='Chưa checkin', index=True)
     note = db.Column(db.String(500), nullable=True)  # New field for notes
     school = db.Column(db.String(200), nullable=True)
     application_track = db.Column(db.String(20), default='engineering')
-    is_deleted = db.Column(db.Boolean, default=False, nullable=False)
+    is_deleted = db.Column(db.Boolean, default=False, nullable=False, index=True)
     # Interview participation confirmation portal (/confirm/<token>).
     confirm_token = db.Column(db.String(64), unique=True, nullable=True)
     confirm_password_hash = db.Column(db.String(200), nullable=True)
@@ -422,7 +472,7 @@ def add_member():
         )
 
         member_data = member_to_dict(new_member)
-        socketio.emit('member_added', member_data)
+        announcer.announce('member_added', member_data)
         logging.info(f"Member added: {new_member.name}")
         return jsonify({'message': 'Member added successfully', 'member': member_data}), 201
     except Exception as e:
@@ -515,21 +565,21 @@ def edit_member(id):
 
             # Emit different events based on state changes and transitions
             if member.state == 'Đậu vòng đơn' and previous_state != 'Đậu vòng đơn':
-                socketio.emit('member_screening_passed', member_data)
+                announcer.announce('member_screening_passed', member_data)
             elif member.state == 'Trượt vòng đơn' and previous_state != 'Trượt vòng đơn':
-                socketio.emit('member_screening_failed', member_data)
+                announcer.announce('member_screening_failed', member_data)
             elif member.state == 'Gọi PV' and previous_state != 'Gọi PV':
-                socketio.emit('member_interview_called', member_data)
+                announcer.announce('member_interview_called', member_data)
             elif member.state == 'Đang phỏng vấn' and previous_state != 'Đang phỏng vấn':
-                socketio.emit('member_interview_started', member_data)
+                announcer.announce('member_interview_started', member_data)
             elif member.state == 'Đã phỏng vấn' and previous_state != 'Đã phỏng vấn':
-                socketio.emit('member_interview_ended', member_data)
+                announcer.announce('member_interview_ended', member_data)
             elif member.state == 'Đã xác nhận' and previous_state != 'Đã xác nhận':
-                socketio.emit('member_confirmed', member_data)
+                announcer.announce('member_confirmed', member_data)
             elif member.state == 'Xin đổi lịch' and previous_state != 'Xin đổi lịch':
-                socketio.emit('member_reschedule_requested', member_data)
+                announcer.announce('member_reschedule_requested', member_data)
             else:
-                socketio.emit('member_edited', member_data)
+                announcer.announce('member_edited', member_data)
 
             logging.info(f"Member edited: {member.name}, state changed from {previous_state} to {member.state}")
             return jsonify(response_payload)
@@ -595,7 +645,7 @@ def delete_member(id):
             )
             member.is_deleted = True
             db.session.commit()
-            socketio.emit('member_deleted', {'id': id})
+            announcer.announce('member_deleted', {'id': id})
             logging.info(f"Member soft-deleted (DB record preserved): {member.name} ({member.MSSV})")
             return jsonify({'message': 'Member deleted successfully'})
         elif member and member.is_deleted:
@@ -666,7 +716,7 @@ def checkin_member():
             )
 
             member_data = member_to_dict(member)
-            socketio.emit('member_checked_in', member_data)
+            announcer.announce('member_checked_in', member_data)
 
             logging.info(f"Member checked in: {member.name}")
             return jsonify({'message': 'Check-in successful', 'member': member_data})
@@ -707,7 +757,7 @@ def checkin_member_esp():
             )
 
             member_data = member_to_dict(member)
-            socketio.emit('member_checked_in', member_data)
+            announcer.announce('member_checked_in', member_data)
             logging.info(f"Member checked in (ESP): {member.name}")
             return jsonify({'message': 'Check-in successful', 'member': member_data})
         else:
@@ -845,7 +895,7 @@ def apply():
             )
 
             member_data = member_to_dict(dup)
-            socketio.emit('member_added', member_data)
+            announcer.announce('member_added', member_data)
             logging.info(f"Re-application received for reactivated member: {dup.name} ({dup.MSSV})")
             return jsonify({'message': 'Nộp đơn thành công', 'member': member_data}), 201
 
@@ -880,7 +930,7 @@ def apply():
         )
 
         member_data = member_to_dict(new_member)
-        socketio.emit('member_added', member_data)
+        announcer.announce('member_added', member_data)
         logging.info(f"New application received: {new_member.name} ({new_member.MSSV})")
         return jsonify({'message': 'Nộp đơn thành công', 'member': member_data}), 201
     except IntegrityError:
@@ -955,7 +1005,7 @@ def confirm_participation(token):
     )
 
     member_data = member_to_dict(member)
-    socketio.emit('member_confirmed', member_data)
+    announcer.announce('member_confirmed', member_data)
     logging.info(f"Candidate confirmed participation: {member.name} ({member.MSSV})")
     return jsonify(confirm_summary(member))
 
@@ -988,37 +1038,42 @@ def confirm_reschedule(token):
     )
 
     member_data = member_to_dict(member)
-    socketio.emit('member_reschedule_requested', member_data)
+    announcer.announce('member_reschedule_requested', member_data)
     logging.info(f"Candidate requested reschedule: {member.name} ({member.MSSV})")
     return jsonify(confirm_summary(member))
 
-@socketio.on('connect')
-def handle_connect():
-    try:
-        logging.info("Client connected to SocketIO")
-        with app.app_context():
-            members = Member.query.filter_by(is_deleted=False).all()
-            member_list = [member_to_dict(member) for member in members]
-            logging.info(f"Sending members list: {len(member_list)} members")
-            emit('members_list', member_list)
-    except Exception as e:
-        logging.error(f"Error during socket connection: {e}")
-        emit('error', {'message': f'Internal server error: {str(e)}'})
+@app.route('/api/events', methods=['GET'])
+def sse_events():
+    """Server-Sent Events endpoint for realtime one-way streaming updates."""
+    token = request.args.get('token')
+    if token:
+        try:
+            decode_token(token)
+        except Exception as e:
+            logging.warning(f"SSE connection with invalid token: {e}")
 
-# Add a socket event handler for client requests
-@socketio.on('request_update')
-def handle_update_request():
-    try:
-        with app.app_context():
-            members = Member.query.filter_by(is_deleted=False).all()
-            member_list = [member_to_dict(member) for member in members]
-            emit('members_list', member_list)
-    except Exception as e:
-        logging.error(f"Error handling update request: {e}")
-        emit('error', {'message': f'Internal server error: {str(e)}'})
+    def stream():
+        q = announcer.listen()
+        # Initial greeting event
+        yield f"event: connected\ndata: {json.dumps({'status': 'ok'})}\n\n"
+        try:
+            while True:
+                try:
+                    # 20-second timeout to send keepalive comment to keep proxy connection alive
+                    msg = q.get(timeout=20)
+                    yield msg
+                except queue.Empty:
+                    yield ": keepalive\n\n"
+        except GeneratorExit:
+            announcer.remove_listener(q)
+
+    response = Response(stream(), mimetype='text/event-stream')
+    response.headers['Cache-Control'] = 'no-cache, no-transform'
+    response.headers['X-Accel-Buffering'] = 'no'
+    response.headers['Connection'] = 'keep-alive'
+    return response
 
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    # Use threading mode for compatibility
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=True, allow_unsafe_werkzeug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)
