@@ -1,8 +1,9 @@
 import { extendTheme } from '@chakra-ui/react';
 
-// BK-AUTO design system (kế thừa từ bkauto.vn, đồng bộ 100% với LEMS và PCG/proxmoxcontrolGUI).
+// BK-AUTO design system — 100% đồng bộ với LEMS và PCG/proxmoxcontrolGUI:
+// canvas sáng (#fafafa), card trắng, sidebar tối (#141414), accent xanh lá #3ac569.
 const config = {
-  initialColorMode: 'dark',
+  initialColorMode: 'light',
   useSystemColorMode: false,
 };
 
@@ -11,8 +12,8 @@ const theme = extendTheme({
   styles: {
     global: {
       'html, body': {
-        bg: '#0f0f0f',
-        color: '#f3f4f6',
+        bg: '#fafafa',
+        color: '#141414',
         fontFamily: `'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`,
         letterSpacing: '-0.01em',
         minHeight: '100vh',
@@ -22,14 +23,14 @@ const theme = extendTheme({
         height: '6px',
       },
       '*::-webkit-scrollbar-track': {
-        background: '#141414',
+        background: 'transparent',
       },
       '*::-webkit-scrollbar-thumb': {
-        background: '#2c2c2c',
+        background: '#d9d9d9',
         borderRadius: '3px',
       },
       '*::-webkit-scrollbar-thumb:hover': {
-        background: '#3ac569',
+        background: '#8c8c8c',
       },
     },
   },
@@ -46,13 +47,29 @@ const theme = extendTheme({
       800: '#1a5f33',
       900: '#123f22',
     },
+    // AntD-derived neutral scale — matches LEMS/PCG's hardcoded grays exactly.
+    gray: {
+      50: '#fafafa',
+      100: '#f5f5f5',
+      200: '#d9d9d9',
+      300: '#bfbfbf',
+      400: '#8c8c8c',
+      500: '#595959',
+      600: '#434343',
+      700: '#262626',
+      800: '#1f1f1f',
+      900: '#141414',
+    },
+    // Dark surfaces — reserved for the Sidebar and the standalone Login hero.
+    // The main content canvas is light (see `gray` above); this scale never
+    // appears in dashboard cards/tables/modals.
     dark: {
-      900: '#0f0f0f', // Main App Canvas
-      850: '#141414', // Sidebar & Top Surfaces
-      800: '#181818', // Cards, Tables, Modals
-      750: '#1f1f1f', // Card Hover, Dropdowns
-      700: '#262626', // Active items, soft borders
-      border: '#282828', // Standard subtle border
+      900: '#0f0f0f',
+      850: '#141414', // Sidebar & dark hero surfaces
+      800: '#181818', // Cards on dark surfaces (Login card)
+      750: '#1f1f1f',
+      700: '#262626',
+      border: '#282828',
       borderLight: '#333333',
       muted: '#888888',
     },
@@ -115,6 +132,19 @@ const theme = extendTheme({
         borderRadius: 'md',
         transition: 'all 0.15s ease-in-out',
       },
+      variants: {
+        solid: (props) => {
+          if (props.colorScheme === 'primary') {
+            return {
+              bg: 'primary.500',
+              color: '#07150c',
+              _hover: { bg: 'primary.600', _disabled: { bg: 'primary.500' } },
+              _active: { bg: 'primary.700' },
+            };
+          }
+          return {};
+        },
+      },
       defaultProps: {
         colorScheme: 'primary',
       },
@@ -123,20 +153,20 @@ const theme = extendTheme({
       variants: {
         outline: {
           field: {
-            bg: 'dark.800',
-            borderColor: 'dark.border',
+            bg: 'white',
+            borderColor: 'gray.200',
             borderRadius: 'md',
-            color: 'white',
+            color: 'gray.900',
             _hover: {
-              borderColor: 'dark.borderLight',
+              borderColor: 'gray.300',
             },
             _focus: {
               borderColor: 'primary.500',
               boxShadow: '0 0 0 1px #3ac569',
-              bg: 'dark.800',
+              bg: 'white',
             },
             _placeholder: {
-              color: 'whiteAlpha.400',
+              color: 'gray.300',
             },
           },
         },
@@ -149,12 +179,12 @@ const theme = extendTheme({
       variants: {
         outline: {
           field: {
-            bg: 'dark.800',
-            borderColor: 'dark.border',
+            bg: 'white',
+            borderColor: 'gray.200',
             borderRadius: 'md',
-            color: 'white',
+            color: 'gray.900',
             _hover: {
-              borderColor: 'dark.borderLight',
+              borderColor: 'gray.300',
             },
             _focus: {
               borderColor: 'primary.500',
@@ -170,19 +200,19 @@ const theme = extendTheme({
     Textarea: {
       variants: {
         outline: {
-          bg: 'dark.800',
-          borderColor: 'dark.border',
+          bg: 'white',
+          borderColor: 'gray.200',
           borderRadius: 'md',
-          color: 'white',
+          color: 'gray.900',
           _hover: {
-            borderColor: 'dark.borderLight',
+            borderColor: 'gray.300',
           },
           _focus: {
             borderColor: 'primary.500',
             boxShadow: '0 0 0 1px #3ac569',
           },
           _placeholder: {
-            color: 'whiteAlpha.400',
+            color: 'gray.300',
           },
         },
       },
@@ -193,23 +223,23 @@ const theme = extendTheme({
     Modal: {
       baseStyle: {
         dialog: {
-          bg: 'dark.800',
-          borderColor: 'dark.border',
+          bg: 'white',
+          borderColor: 'gray.200',
           borderWidth: '1px',
           borderRadius: 'xl',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 10px 10px -5px rgba(0, 0, 0, 0.5)',
-          color: 'white',
+          boxShadow: '0 20px 25px -5px rgba(20, 20, 20, 0.12), 0 10px 10px -5px rgba(20, 20, 20, 0.06)',
+          color: 'gray.900',
         },
         header: {
           fontFamily: 'heading',
           fontWeight: 700,
           borderBottomWidth: '1px',
-          borderColor: 'dark.border',
+          borderColor: 'gray.200',
           py: 4,
         },
         footer: {
           borderTopWidth: '1px',
-          borderColor: 'dark.border',
+          borderColor: 'gray.200',
           py: 3,
         },
       },
@@ -217,11 +247,11 @@ const theme = extendTheme({
     Card: {
       baseStyle: {
         container: {
-          bg: 'dark.800',
-          borderColor: 'dark.border',
+          bg: 'white',
+          borderColor: 'gray.200',
           borderWidth: '1px',
           borderRadius: 'lg',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.25)',
+          boxShadow: '0 1px 2px rgba(20, 20, 20, 0.04)',
         },
       },
     },

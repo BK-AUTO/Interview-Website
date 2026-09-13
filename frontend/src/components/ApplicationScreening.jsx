@@ -33,6 +33,7 @@ import {
 import api from '../api/axios';
 import ConfirmCredentialsModal from './ConfirmCredentialsModal';
 import CandidateDetailModal from './CandidateDetailModal';
+import { DEPARTMENT_LABELS, TRACK_LABELS } from '../config';
 
 const ApplicationScreening = ({ members, setMembers }) => {
   const toast = useToast();
@@ -40,6 +41,7 @@ const ApplicationScreening = ({ members, setMembers }) => {
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
+  const [trackFilter, setTrackFilter] = useState('');
   const [processingId, setProcessingId] = useState(null);
 
   const pending = useMemo(
@@ -68,16 +70,18 @@ const ApplicationScreening = ({ members, setMembers }) => {
         m.MSSV.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (m.email && m.email.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchDept = deptFilter === '' || m.specialist === deptFilter;
-      return matchSearch && matchDept;
+      const track = m.application_track || 'engineering';
+      const matchTrack = trackFilter === '' || track === trackFilter;
+      return matchSearch && matchDept && matchTrack;
     });
-  }, [pending, searchTerm, deptFilter]);
+  }, [pending, searchTerm, deptFilter, trackFilter]);
 
   const decide = async (member, decision) => {
     setProcessingId(member.id);
     try {
       const response = await api.put(`/api/members/${member.id}`, { state: decision });
       setMembers((prev) => prev.map((m) => (m.id === member.id ? response.data.member : m)));
-      
+
       toast({
         title: decision === 'Đậu vòng đơn' ? `Đã duyệt ĐẬU hồ sơ: ${member.name}` : `Đã duyệt TRƯỢT: ${member.name}`,
         status: decision === 'Đậu vòng đơn' ? 'success' : 'warning',
@@ -141,10 +145,10 @@ const ApplicationScreening = ({ members, setMembers }) => {
             <FaClipboardCheck size={20} />
           </Box>
           <Box>
-            <Heading fontSize={{ base: 'xl', md: '2xl' }} fontWeight="bold" color="white">
+            <Heading fontSize={{ base: 'xl', md: '2xl' }} fontWeight="bold" color="gray.900">
               Duyệt hồ sơ vòng đơn
             </Heading>
-            <Text fontSize="xs" color="whiteAlpha.600">
+            <Text fontSize="xs" color="gray.500">
               Sàng lọc hồ sơ ứng viên nộp qua form website BK-AUTO trước khi cấp quyền xác nhận phỏng vấn
             </Text>
           </Box>
@@ -153,13 +157,13 @@ const ApplicationScreening = ({ members, setMembers }) => {
 
       {/* KPI Stat Cards */}
       <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4} mb={6}>
-        <Box p={4} borderRadius="xl" bg="dark.800" borderWidth="1px" borderColor="dark.border">
+        <Box p={4} borderRadius="xl" bg="white" borderWidth="1px" borderColor="gray.200">
           <Flex justify="space-between" align="center">
             <Box>
-              <Text fontSize="xs" fontWeight="semibold" color="whiteAlpha.600" textTransform="uppercase" letterSpacing="0.05em">
+              <Text fontSize="xs" fontWeight="semibold" color="gray.500" textTransform="uppercase" letterSpacing="0.05em">
                 Tổng đơn chờ duyệt
               </Text>
-              <Text fontSize="2xl" fontWeight="bold" color="white" mt={1}>
+              <Text fontSize="2xl" fontWeight="bold" color="gray.900" mt={1}>
                 {pending.length}
               </Text>
             </Box>
@@ -169,10 +173,10 @@ const ApplicationScreening = ({ members, setMembers }) => {
           </Flex>
         </Box>
 
-        <Box p={4} borderRadius="xl" bg="dark.800" borderWidth="1px" borderColor="dark.border">
+        <Box p={4} borderRadius="xl" bg="white" borderWidth="1px" borderColor="gray.200">
           <Flex justify="space-between" align="center">
             <Box>
-              <Text fontSize="xs" fontWeight="semibold" color="whiteAlpha.600" textTransform="uppercase" letterSpacing="0.05em">
+              <Text fontSize="xs" fontWeight="semibold" color="gray.500" textTransform="uppercase" letterSpacing="0.05em">
                 Sinh viên Bách Khoa (HUST)
               </Text>
               <Text fontSize="2xl" fontWeight="bold" color="info.500" mt={1}>
@@ -185,10 +189,10 @@ const ApplicationScreening = ({ members, setMembers }) => {
           </Flex>
         </Box>
 
-        <Box p={4} borderRadius="xl" bg="dark.800" borderWidth="1px" borderColor="dark.border">
+        <Box p={4} borderRadius="xl" bg="white" borderWidth="1px" borderColor="gray.200">
           <Flex justify="space-between" align="center">
             <Box>
-              <Text fontSize="xs" fontWeight="semibold" color="whiteAlpha.600" textTransform="uppercase" letterSpacing="0.05em">
+              <Text fontSize="xs" fontWeight="semibold" color="gray.500" textTransform="uppercase" letterSpacing="0.05em">
                 Sinh viên ngoài HUST
               </Text>
               <Text fontSize="2xl" fontWeight="bold" color="secondary.500" mt={1}>
@@ -203,7 +207,7 @@ const ApplicationScreening = ({ members, setMembers }) => {
       </SimpleGrid>
 
       {/* Filter & Search Bar */}
-      <Box p={4} borderRadius="xl" bg="dark.800" borderWidth="1px" borderColor="dark.border" mb={6}>
+      <Box p={4} borderRadius="xl" bg="white" borderWidth="1px" borderColor="gray.200" mb={6}>
         <HStack spacing={4} flexWrap="wrap">
           <Box flex="1" minW="240px">
             <Input
@@ -213,6 +217,21 @@ const ApplicationScreening = ({ members, setMembers }) => {
               size="sm"
             />
           </Box>
+          <Box w={{ base: 'full', sm: '160px' }}>
+            <Select
+              placeholder="Tất cả track"
+              value={trackFilter}
+              onChange={(e) => setTrackFilter(e.target.value)}
+              size="sm"
+            >
+              <option value="engineering" style={{ background: '#ffffff', color: '#141414' }}>
+                Kỹ thuật
+              </option>
+              <option value="media" style={{ background: '#ffffff', color: '#141414' }}>
+                Truyền thông
+              </option>
+            </Select>
+          </Box>
           <Box w={{ base: 'full', sm: '200px' }}>
             <Select
               placeholder="Tất cả mảng"
@@ -221,8 +240,8 @@ const ApplicationScreening = ({ members, setMembers }) => {
               size="sm"
             >
               {uniqueDepartments.map((dept) => (
-                <option key={dept} value={dept} style={{ background: '#181818', color: 'white' }}>
-                  {dept}
+                <option key={dept} value={dept} style={{ background: '#ffffff', color: '#141414' }}>
+                  {DEPARTMENT_LABELS[dept] || dept}
                 </option>
               ))}
             </Select>
@@ -232,28 +251,28 @@ const ApplicationScreening = ({ members, setMembers }) => {
 
       {/* Candidates Table */}
       {filteredPending.length === 0 ? (
-        <Box textAlign="center" py={12} bg="dark.800" borderWidth="1px" borderColor="dark.border" borderRadius="xl">
-          <Box as={FaClipboardCheck} boxSize={10} color="whiteAlpha.300" mx="auto" mb={3} />
-          <Text fontSize="md" fontWeight="medium" color="whiteAlpha.700">
+        <Box textAlign="center" py={12} bg="white" borderWidth="1px" borderColor="gray.200" borderRadius="xl">
+          <Box as={FaClipboardCheck} boxSize={10} color="gray.200" mx="auto" mb={3} />
+          <Text fontSize="md" fontWeight="medium" color="gray.600">
             {pending.length === 0 ? 'Không có hồ sơ nào đang chờ duyệt' : 'Không tìm thấy hồ sơ phù hợp với bộ lọc'}
           </Text>
-          <Text fontSize="xs" color="whiteAlpha.400" mt={1}>
+          <Text fontSize="xs" color="gray.300" mt={1}>
             {pending.length === 0 ? 'Hồ sơ mới nộp từ form tuyển sinh sẽ xuất hiện tự động tại đây' : 'Thử xoá bớt từ khoá tìm kiếm'}
           </Text>
         </Box>
       ) : (
-        <Box bg="dark.800" borderWidth="1px" borderColor="dark.border" borderRadius="xl" overflow="hidden">
+        <Box bg="white" borderWidth="1px" borderColor="gray.200" borderRadius="xl" overflow="hidden">
           <Box overflowX="auto">
             <Table variant="simple" size="sm">
-              <Thead bg="dark.850">
+              <Thead bg="gray.50">
                 <Tr>
-                  <Th color="whiteAlpha.600" py={3.5} fontSize="11px">Ứng viên</Th>
-                  <Th color="whiteAlpha.600" py={3.5} fontSize="11px">Liên hệ</Th>
-                  <Th color="whiteAlpha.600" py={3.5} fontSize="11px">Mảng ứng tuyển</Th>
-                  <Th color="whiteAlpha.600" py={3.5} fontSize="11px">Đối tượng</Th>
-                  <Th color="whiteAlpha.600" py={3.5} fontSize="11px">CV Đính kèm</Th>
-                  <Th color="whiteAlpha.600" py={3.5} fontSize="11px">Ghi chú / Trả lời</Th>
-                  <Th color="whiteAlpha.600" py={3.5} fontSize="11px" textAlign="right">Quyết định</Th>
+                  <Th color="gray.500" py={3.5} fontSize="11px">Ứng viên</Th>
+                  <Th color="gray.500" py={3.5} fontSize="11px">Liên hệ</Th>
+                  <Th color="gray.500" py={3.5} fontSize="11px">Mảng ứng tuyển</Th>
+                  <Th color="gray.500" py={3.5} fontSize="11px">Đối tượng</Th>
+                  <Th color="gray.500" py={3.5} fontSize="11px">CV Đính kèm</Th>
+                  <Th color="gray.500" py={3.5} fontSize="11px">Ghi chú / Trả lời</Th>
+                  <Th color="gray.500" py={3.5} fontSize="11px" textAlign="right">Quyết định</Th>
                 </Tr>
               </Thead>
               <Tbody>
@@ -264,20 +283,20 @@ const ApplicationScreening = ({ members, setMembers }) => {
                   return (
                     <Tr
                       key={member.id}
-                      _hover={{ bg: 'dark.750' }}
+                      _hover={{ bg: 'primary.50' }}
                       transition="background-color 0.15s"
-                      borderColor="dark.border"
+                      borderColor="gray.200"
                     >
                       <Td py={3}>
-                        <Text fontWeight="semibold" color="white" fontSize="sm">
+                        <Text fontWeight="semibold" color="gray.900" fontSize="sm">
                           {member.name}
                         </Text>
                         <HStack spacing={2} mt={0.5}>
-                          <Text fontSize="xs" color="primary.500" fontFamily="mono">
+                          <Text fontSize="xs" color="primary.600" fontFamily="mono">
                             {member.MSSV}
                           </Text>
                           {member.major_class && (
-                            <Text fontSize="xs" color="whiteAlpha.500">
+                            <Text fontSize="xs" color="gray.400">
                               • {member.major_class}
                             </Text>
                           )}
@@ -285,25 +304,25 @@ const ApplicationScreening = ({ members, setMembers }) => {
                       </Td>
 
                       <Td py={3}>
-                        <Text fontSize="xs" color="whiteAlpha.900">{member.email}</Text>
-                        <Text fontSize="xs" color="whiteAlpha.500">{member.phone || '-'}</Text>
+                        <Text fontSize="xs" color="gray.700">{member.email}</Text>
+                        <Text fontSize="xs" color="gray.400">{member.phone || '-'}</Text>
                       </Td>
 
                       <Td py={3}>
                         <Badge
                           bg="rgba(58, 197, 105, 0.12)"
-                          color="primary.500"
+                          color="primary.600"
                           border="1px solid"
                           borderColor="rgba(58, 197, 105, 0.3)"
                           fontSize="xs"
                         >
-                          {member.specialist}
+                          {DEPARTMENT_LABELS[member.specialist] || member.specialist}
                         </Badge>
                         {subDepartments.length > 0 && (
                           <HStack spacing={1} mt={1} flexWrap="wrap">
                             {subDepartments.map((d) => (
-                              <Badge key={d} variant="subtle" bg="dark.700" color="whiteAlpha.700" fontSize="10px">
-                                {d}
+                              <Badge key={d} variant="subtle" bg="gray.100" color="gray.600" fontSize="10px">
+                                {DEPARTMENT_LABELS[d] || d}
                               </Badge>
                             ))}
                           </HStack>
@@ -311,15 +330,26 @@ const ApplicationScreening = ({ members, setMembers }) => {
                       </Td>
 
                       <Td py={3}>
-                        {member.student_type === 'hust' ? (
-                          <Badge bg="rgba(24, 144, 255, 0.12)" color="info.500" border="1px solid" borderColor="rgba(24, 144, 255, 0.3)">
-                            HUST
+                        <HStack spacing={1}>
+                          <Badge
+                            bg={member.application_track === 'media' ? "rgba(250, 140, 22, 0.12)" : "rgba(24, 144, 255, 0.12)"}
+                            color={member.application_track === 'media' ? "orange.600" : "info.600"}
+                            border="1px solid"
+                            borderColor={member.application_track === 'media' ? "rgba(250, 140, 22, 0.3)" : "rgba(24, 144, 255, 0.3)"}
+                            fontSize="xs"
+                          >
+                            {TRACK_LABELS[member.application_track] || (member.application_track === 'media' ? 'Truyền thông' : 'Kỹ thuật')}
                           </Badge>
-                        ) : (
-                          <Badge bg="rgba(114, 46, 209, 0.12)" color="secondary.500" border="1px solid" borderColor="rgba(114, 46, 209, 0.3)">
-                            Ngoài HUST
-                          </Badge>
-                        )}
+                          {member.student_type === 'hust' ? (
+                            <Badge bg="rgba(24, 144, 255, 0.12)" color="info.600" border="1px solid" borderColor="rgba(24, 144, 255, 0.3)">
+                              HUST
+                            </Badge>
+                          ) : (
+                            <Badge bg="rgba(114, 46, 209, 0.12)" color="secondary.600" border="1px solid" borderColor="rgba(114, 46, 209, 0.3)">
+                              Ngoài HUST
+                            </Badge>
+                          )}
+                        </HStack>
                       </Td>
 
                       <Td py={3}>
@@ -335,12 +365,12 @@ const ApplicationScreening = ({ members, setMembers }) => {
                             Xem CV
                           </Button>
                         ) : (
-                          <Text color="whiteAlpha.400" fontSize="xs">Không có</Text>
+                          <Text color="gray.300" fontSize="xs">Không có</Text>
                         )}
                       </Td>
 
                       <Td py={3} maxW="240px">
-                        <Text fontSize="xs" color="whiteAlpha.700" noOfLines={2} title={member.note}>
+                        <Text fontSize="xs" color="gray.600" noOfLines={2} title={member.note}>
                           {member.note || '-'}
                         </Text>
                       </Td>
@@ -352,8 +382,8 @@ const ApplicationScreening = ({ members, setMembers }) => {
                               size="xs"
                               variant="ghost"
                               icon={<FaEye />}
-                              color="whiteAlpha.700"
-                              _hover={{ color: 'primary.400', bg: 'dark.700' }}
+                              color="gray.500"
+                              _hover={{ color: 'primary.500', bg: 'gray.100' }}
                               onClick={() => setSelectedCandidate(member)}
                               aria-label="Xem chi tiết"
                             />

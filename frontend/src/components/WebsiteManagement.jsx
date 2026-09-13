@@ -30,10 +30,10 @@ const WebsiteManagement = ({ setActiveTab }) => {
             <SettingsIcon boxSize={5} />
           </Box>
           <Box>
-            <Heading fontSize={{ base: 'xl', md: '2xl' }} fontWeight="bold" color="white">
+            <Heading fontSize={{ base: 'xl', md: '2xl' }} fontWeight="bold" color="gray.900">
               Cấu hình hệ thống & Quản trị Website
             </Heading>
-            <Text fontSize="xs" color="whiteAlpha.600">
+            <Text fontSize="xs" color="gray.500">
               Các thông số kết nối, liên kết nền tảng BK-AUTO và quản lý tuyển dụng
             </Text>
           </Box>
@@ -43,21 +43,21 @@ const WebsiteManagement = ({ setActiveTab }) => {
       {/* Settings Grid */}
       <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
         {/* Module Điều phối tuyển dụng */}
-        <Box p={5} borderRadius="xl" bg="dark.800" borderWidth="1px" borderColor="dark.border">
+        <Box p={5} borderRadius="xl" bg="white" borderWidth="1px" borderColor="gray.200">
           <HStack spacing={3} mb={3}>
             <Box p={2.5} borderRadius="lg" bg="rgba(58, 197, 105, 0.12)" color="primary.500">
               <FaUsers size={18} />
             </Box>
             <Box>
-              <Heading fontSize="md" fontWeight="bold" color="white">
+              <Heading fontSize="md" fontWeight="bold" color="gray.900">
                 Cơ sở dữ liệu ứng viên
               </Heading>
-              <Text fontSize="xs" color="whiteAlpha.600">
+              <Text fontSize="xs" color="gray.500">
                 Điều hướng nhanh tới các phân hệ quản lý
               </Text>
             </Box>
           </HStack>
-          <Divider borderColor="dark.border" mb={4} />
+          <Divider borderColor="gray.200" mb={4} />
           <VStack spacing={3} align="stretch">
             <Button
               justifyContent="space-between"
@@ -93,36 +93,36 @@ const WebsiteManagement = ({ setActiveTab }) => {
         </Box>
 
         {/* Thông tin hệ thống & SSO */}
-        <Box p={5} borderRadius="xl" bg="dark.800" borderWidth="1px" borderColor="dark.border">
+        <Box p={5} borderRadius="xl" bg="white" borderWidth="1px" borderColor="gray.200">
           <HStack spacing={3} mb={3}>
             <Box p={2.5} borderRadius="lg" bg="rgba(24, 144, 255, 0.12)" color="info.500">
               <FaShieldAlt size={18} />
             </Box>
             <Box>
-              <Heading fontSize="md" fontWeight="bold" color="white">
+              <Heading fontSize="md" fontWeight="bold" color="gray.900">
                 Xác thực & Hạ tầng
               </Heading>
-              <Text fontSize="xs" color="whiteAlpha.600">
+              <Text fontSize="xs" color="gray.500">
                 Trạng thái Authentik SSO & CSDL
               </Text>
             </Box>
           </HStack>
-          <Divider borderColor="dark.border" mb={4} />
+          <Divider borderColor="gray.200" mb={4} />
           <VStack spacing={3} align="stretch" fontSize="xs">
-            <Flex justify="space-between" p={2.5} borderRadius="md" bg="dark.750">
-              <Text color="whiteAlpha.700">Dịch vụ SSO:</Text>
-              <Badge bg="rgba(58, 197, 105, 0.15)" color="primary.500" border="1px solid rgba(58, 197, 105, 0.3)">
+            <Flex justify="space-between" p={2.5} borderRadius="md" bg="gray.50">
+              <Text color="gray.600">Dịch vụ SSO:</Text>
+              <Badge bg="rgba(58, 197, 105, 0.15)" color="primary.600" border="1px solid rgba(58, 197, 105, 0.3)">
                 Authentik OIDC Active
               </Badge>
             </Flex>
-            <Flex justify="space-between" p={2.5} borderRadius="md" bg="dark.750">
-              <Text color="whiteAlpha.700">Database Engine:</Text>
-              <Badge bg="dark.700" color="whiteAlpha.800">
+            <Flex justify="space-between" p={2.5} borderRadius="md" bg="gray.50">
+              <Text color="gray.600">Database Engine:</Text>
+              <Badge bg="gray.100" color="gray.700">
                 SQLite (Persistent Volume)
               </Badge>
             </Flex>
-            <Flex justify="space-between" p={2.5} borderRadius="md" bg="dark.750">
-              <Text color="whiteAlpha.700">Website chính thức:</Text>
+            <Flex justify="space-between" p={2.5} borderRadius="md" bg="gray.50">
+              <Text color="gray.600">Website chính thức:</Text>
               <Button
                 as="a"
                 href="https://bkauto.vn"

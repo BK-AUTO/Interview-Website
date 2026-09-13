@@ -36,25 +36,25 @@ import CandidateDetailModal from './CandidateDetailModal';
 const STATE_BADGE_PROPS = {
   'Đậu vòng đơn': {
     bg: 'rgba(24, 144, 255, 0.12)',
-    color: 'info.500',
+    color: 'info.600',
     borderColor: 'rgba(24, 144, 255, 0.3)',
     label: 'Chờ ứng viên xác nhận',
   },
   'Xin đổi lịch': {
     bg: 'rgba(250, 173, 20, 0.12)',
-    color: 'warning.500',
+    color: 'warning.700',
     borderColor: 'rgba(250, 173, 20, 0.3)',
     label: 'Yêu cầu đổi lịch',
   },
   'Đã xác nhận': {
     bg: 'rgba(58, 197, 105, 0.12)',
-    color: 'primary.500',
+    color: 'primary.600',
     borderColor: 'rgba(58, 197, 105, 0.3)',
     label: 'Đã xác nhận tham gia',
   },
   'Trượt vòng đơn': {
     bg: 'rgba(245, 34, 45, 0.12)',
-    color: 'danger.500',
+    color: 'danger.600',
     borderColor: 'rgba(245, 34, 45, 0.3)',
     label: 'Không đạt vòng đơn',
   },
@@ -143,10 +143,10 @@ const ApprovedCandidates = ({ members, setMembers }) => {
             <FaUserCheck size={20} />
           </Box>
           <Box>
-            <Heading fontSize={{ base: 'xl', md: '2xl' }} fontWeight="bold" color="white">
+            <Heading fontSize={{ base: 'xl', md: '2xl' }} fontWeight="bold" color="gray.900">
               Ứng viên đã duyệt & Quản lý xác nhận
             </Heading>
-            <Text fontSize="xs" color="whiteAlpha.600">
+            <Text fontSize="xs" color="gray.500">
               Quản lý danh sách ứng viên đậu/trượt vòng đơn, lấy link và mã xác nhận gửi cho ứng viên
             </Text>
           </Box>
@@ -155,10 +155,10 @@ const ApprovedCandidates = ({ members, setMembers }) => {
 
       {/* KPI Stats */}
       <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4} mb={6}>
-        <Box p={4} borderRadius="xl" bg="dark.800" borderWidth="1px" borderColor="dark.border">
+        <Box p={4} borderRadius="xl" bg="white" borderWidth="1px" borderColor="gray.200">
           <Flex justify="space-between" align="center">
             <Box>
-              <Text fontSize="xs" fontWeight="semibold" color="whiteAlpha.600" textTransform="uppercase" letterSpacing="0.05em">
+              <Text fontSize="xs" fontWeight="semibold" color="gray.500" textTransform="uppercase" letterSpacing="0.05em">
                 Đậu vòng đơn
               </Text>
               <Text fontSize="2xl" fontWeight="bold" color="info.500" mt={1}>
@@ -171,10 +171,10 @@ const ApprovedCandidates = ({ members, setMembers }) => {
           </Flex>
         </Box>
 
-        <Box p={4} borderRadius="xl" bg="dark.800" borderWidth="1px" borderColor="dark.border">
+        <Box p={4} borderRadius="xl" bg="white" borderWidth="1px" borderColor="gray.200">
           <Flex justify="space-between" align="center">
             <Box>
-              <Text fontSize="xs" fontWeight="semibold" color="whiteAlpha.600" textTransform="uppercase" letterSpacing="0.05em">
+              <Text fontSize="xs" fontWeight="semibold" color="gray.500" textTransform="uppercase" letterSpacing="0.05em">
                 Đã xác nhận PV
               </Text>
               <Text fontSize="2xl" fontWeight="bold" color="primary.500" mt={1}>
@@ -187,26 +187,26 @@ const ApprovedCandidates = ({ members, setMembers }) => {
           </Flex>
         </Box>
 
-        <Box p={4} borderRadius="xl" bg="dark.800" borderWidth="1px" borderColor="dark.border">
+        <Box p={4} borderRadius="xl" bg="white" borderWidth="1px" borderColor="gray.200">
           <Flex justify="space-between" align="center">
             <Box>
-              <Text fontSize="xs" fontWeight="semibold" color="whiteAlpha.600" textTransform="uppercase" letterSpacing="0.05em">
+              <Text fontSize="xs" fontWeight="semibold" color="gray.500" textTransform="uppercase" letterSpacing="0.05em">
                 Xin đổi lịch
               </Text>
-              <Text fontSize="2xl" fontWeight="bold" color="warning.500" mt={1}>
+              <Text fontSize="2xl" fontWeight="bold" color="warning.600" mt={1}>
                 {stats.xinDoiLich}
               </Text>
             </Box>
-            <Box p={2.5} borderRadius="lg" bg="rgba(250, 173, 20, 0.12)" color="warning.500">
+            <Box p={2.5} borderRadius="lg" bg="rgba(250, 173, 20, 0.12)" color="warning.600">
               <FaCalendarAlt size={18} />
             </Box>
           </Flex>
         </Box>
 
-        <Box p={4} borderRadius="xl" bg="dark.800" borderWidth="1px" borderColor="dark.border">
+        <Box p={4} borderRadius="xl" bg="white" borderWidth="1px" borderColor="gray.200">
           <Flex justify="space-between" align="center">
             <Box>
-              <Text fontSize="xs" fontWeight="semibold" color="whiteAlpha.600" textTransform="uppercase" letterSpacing="0.05em">
+              <Text fontSize="xs" fontWeight="semibold" color="gray.500" textTransform="uppercase" letterSpacing="0.05em">
                 Trượt vòng đơn
               </Text>
               <Text fontSize="2xl" fontWeight="bold" color="danger.500" mt={1}>
@@ -221,7 +221,7 @@ const ApprovedCandidates = ({ members, setMembers }) => {
       </SimpleGrid>
 
       {/* Filter & Search Bar */}
-      <Box p={4} borderRadius="xl" bg="dark.800" borderWidth="1px" borderColor="dark.border" mb={6}>
+      <Box p={4} borderRadius="xl" bg="white" borderWidth="1px" borderColor="gray.200" mb={6}>
         <HStack spacing={4} flexWrap="wrap">
           <Box flex="1" minW="240px">
             <Input
@@ -239,7 +239,7 @@ const ApprovedCandidates = ({ members, setMembers }) => {
               size="sm"
             >
               {RELEVANT_STATES.map((st) => (
-                <option key={st} value={st} style={{ background: '#181818', color: 'white' }}>
+                <option key={st} value={st} style={{ background: '#ffffff', color: '#141414' }}>
                   {st}
                 </option>
               ))}
@@ -250,50 +250,50 @@ const ApprovedCandidates = ({ members, setMembers }) => {
 
       {/* Table */}
       {filteredCandidates.length === 0 ? (
-        <Box textAlign="center" py={12} bg="dark.800" borderWidth="1px" borderColor="dark.border" borderRadius="xl">
-          <Box as={FaUserCheck} boxSize={10} color="whiteAlpha.300" mx="auto" mb={3} />
-          <Text fontSize="md" fontWeight="medium" color="whiteAlpha.700">
+        <Box textAlign="center" py={12} bg="white" borderWidth="1px" borderColor="gray.200" borderRadius="xl">
+          <Box as={FaUserCheck} boxSize={10} color="gray.200" mx="auto" mb={3} />
+          <Text fontSize="md" fontWeight="medium" color="gray.600">
             Chưa có ứng viên nào ở danh sách này
           </Text>
         </Box>
       ) : (
-        <Box bg="dark.800" borderWidth="1px" borderColor="dark.border" borderRadius="xl" overflow="hidden">
+        <Box bg="white" borderWidth="1px" borderColor="gray.200" borderRadius="xl" overflow="hidden">
           <Box overflowX="auto">
             <Table variant="simple" size="sm">
-              <Thead bg="dark.850">
+              <Thead bg="gray.50">
                 <Tr>
-                  <Th color="whiteAlpha.600" py={3.5} fontSize="11px">Ứng viên</Th>
-                  <Th color="whiteAlpha.600" py={3.5} fontSize="11px">Mảng ứng tuyển</Th>
-                  <Th color="whiteAlpha.600" py={3.5} fontSize="11px">Trạng thái xác nhận</Th>
-                  <Th color="whiteAlpha.600" py={3.5} fontSize="11px">Yêu cầu đổi lịch</Th>
-                  <Th color="whiteAlpha.600" py={3.5} fontSize="11px" textAlign="right">Thao tác xác nhận</Th>
+                  <Th color="gray.500" py={3.5} fontSize="11px">Ứng viên</Th>
+                  <Th color="gray.500" py={3.5} fontSize="11px">Mảng ứng tuyển</Th>
+                  <Th color="gray.500" py={3.5} fontSize="11px">Trạng thái xác nhận</Th>
+                  <Th color="gray.500" py={3.5} fontSize="11px">Yêu cầu đổi lịch</Th>
+                  <Th color="gray.500" py={3.5} fontSize="11px" textAlign="right">Thao tác xác nhận</Th>
                 </Tr>
               </Thead>
               <Tbody>
                 {filteredCandidates.map((member) => {
                   const badgeStyle = STATE_BADGE_PROPS[member.state] || {
-                    bg: 'dark.700',
-                    color: 'white',
-                    borderColor: 'dark.border',
+                    bg: 'gray.100',
+                    color: 'gray.900',
+                    borderColor: 'gray.200',
                   };
 
                   return (
                     <Tr
                       key={member.id}
-                      _hover={{ bg: 'dark.750' }}
+                      _hover={{ bg: 'primary.50' }}
                       transition="background-color 0.15s"
-                      borderColor="dark.border"
+                      borderColor="gray.200"
                     >
                       <Td py={3}>
-                        <Text fontWeight="semibold" color="white" fontSize="sm">
+                        <Text fontWeight="semibold" color="gray.900" fontSize="sm">
                           {member.name}
                         </Text>
                         <HStack spacing={2} mt={0.5}>
-                          <Text fontSize="xs" color="primary.500" fontFamily="mono">
+                          <Text fontSize="xs" color="primary.600" fontFamily="mono">
                             {member.MSSV}
                           </Text>
                           {member.phone && (
-                            <Text fontSize="xs" color="whiteAlpha.500">
+                            <Text fontSize="xs" color="gray.400">
                               • {member.phone}
                             </Text>
                           )}
@@ -301,7 +301,7 @@ const ApprovedCandidates = ({ members, setMembers }) => {
                       </Td>
 
                       <Td py={3}>
-                        <Badge bg="dark.700" color="whiteAlpha.800" fontSize="xs">
+                        <Badge bg="gray.100" color="gray.700" fontSize="xs">
                           {member.specialist}
                         </Badge>
                       </Td>
@@ -317,7 +317,7 @@ const ApprovedCandidates = ({ members, setMembers }) => {
                           {member.state}
                         </Badge>
                         {member.confirmed_at && (
-                          <Text fontSize="10px" color="whiteAlpha.400" mt={0.5}>
+                          <Text fontSize="10px" color="gray.300" mt={0.5}>
                             Lúc {member.confirmed_at}
                           </Text>
                         )}
@@ -326,12 +326,12 @@ const ApprovedCandidates = ({ members, setMembers }) => {
                       <Td py={3} maxW="240px">
                         {member.reschedule_request ? (
                           <Box p={1.5} borderRadius="md" bg="rgba(250, 173, 20, 0.08)" border="1px solid" borderColor="rgba(250, 173, 20, 0.2)">
-                            <Text fontSize="xs" color="warning.500" noOfLines={2}>
+                            <Text fontSize="xs" color="warning.700" noOfLines={2}>
                               &ldquo;{member.reschedule_request}&rdquo;
                             </Text>
                           </Box>
                         ) : (
-                          <Text fontSize="xs" color="whiteAlpha.400">-</Text>
+                          <Text fontSize="xs" color="gray.300">-</Text>
                         )}
                       </Td>
 
@@ -342,8 +342,8 @@ const ApprovedCandidates = ({ members, setMembers }) => {
                               size="xs"
                               variant="ghost"
                               icon={<FaEye />}
-                              color="whiteAlpha.700"
-                              _hover={{ color: 'primary.400', bg: 'dark.700' }}
+                              color="gray.500"
+                              _hover={{ color: 'primary.500', bg: 'gray.100' }}
                               onClick={() => setSelectedCandidate(member)}
                               aria-label="Xem chi tiết"
                             />

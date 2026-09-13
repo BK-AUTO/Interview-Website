@@ -7,46 +7,76 @@ import {
   Text,
   VStack,
   HStack,
-  Container,
   Center,
-  Badge,
 } from '@chakra-ui/react';
-import { FaShieldAlt } from 'react-icons/fa';
+import { FaShieldAlt, FaKey, FaArrowRight } from 'react-icons/fa';
 import { BASE_URL } from '../config';
 
+// Dark gradient hero — mirrors the login pages of LEMS and PCG
+// (proxmoxcontrolGUI) for a consistent BK-AUTO login experience across apps.
 const Login = () => {
   const handleLogin = () => {
     window.location.assign(`${BASE_URL}/api/auth/login`);
   };
 
   return (
-    <Center minH="100vh" bg="#0a0a0a" px={4} position="relative" overflow="hidden">
-      {/* Subtle Background Glows */}
+    <Center minH="100vh" bg="#141414" px={4} py={8} position="relative" overflow="hidden">
+      {/* Layered gradient background */}
       <Box
         position="absolute"
-        top="-10%"
+        inset={0}
+        bgGradient="linear(to-br, #141414, #1a1a1a, #0a0a0a)"
+        zIndex={0}
+      />
+      {/* Green glow — top center */}
+      <Box
+        position="absolute"
+        top="-15%"
         left="50%"
         transform="translateX(-50%)"
-        w="500px"
-        h="500px"
-        bg="radial-gradient(circle, rgba(58, 197, 105, 0.08) 0%, rgba(0, 0, 0, 0) 70%)"
+        w="800px"
+        h="800px"
+        maxW="150vw"
+        borderRadius="full"
+        bg="rgba(58, 197, 105, 0.08)"
+        filter="blur(80px)"
         pointerEvents="none"
+        zIndex={0}
+      />
+      {/* Purple glow — bottom right */}
+      <Box
+        position="absolute"
+        bottom="-15%"
+        right="-10%"
+        w="600px"
+        h="600px"
+        maxW="120vw"
+        borderRadius="full"
+        bg="rgba(179, 127, 235, 0.05)"
+        filter="blur(80px)"
+        pointerEvents="none"
+        zIndex={0}
+      />
+      {/* Grid pattern overlay */}
+      <Box
+        position="absolute"
+        inset={0}
+        opacity={0.03}
+        pointerEvents="none"
+        zIndex={0}
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
+          backgroundSize: '40px 40px',
+        }}
       />
 
-      <Container maxW="md" position="relative" zIndex={1}>
-        <Box
-          p={{ base: 6, md: 8 }}
-          borderRadius="2xl"
-          bg="dark.850"
-          borderWidth="1px"
-          borderColor="dark.border"
-          boxShadow="0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05)"
-          textAlign="center"
-        >
-          {/* Logo & Branding */}
+      <VStack spacing={8} position="relative" zIndex={1} w="full" maxW="420px">
+        {/* Logo & Branding */}
+        <VStack spacing={4}>
           <Box
-            w="64px"
-            h="64px"
+            w="72px"
+            h="72px"
             borderRadius="2xl"
             bg="rgba(58, 197, 105, 0.1)"
             border="1px solid"
@@ -54,54 +84,55 @@ const Login = () => {
             display="flex"
             alignItems="center"
             justifyContent="center"
-            mx="auto"
-            mb={5}
             p={2}
           >
             <Image src="/logobkauto.png" alt="BK-AUTO" objectFit="contain" />
           </Box>
-
-          <Heading
-            fontSize="2xl"
-            fontWeight="bold"
-            color="white"
-            fontFamily="heading"
-            letterSpacing="-0.02em"
-            mb={1}
-          >
-            BK-AUTO
-          </Heading>
-
-          <HStack justify="center" spacing={2} mb={4}>
-            <Badge
-              bg="rgba(58, 197, 105, 0.15)"
-              color="primary.500"
-              border="1px solid"
-              borderColor="rgba(58, 197, 105, 0.3)"
-              fontSize="xs"
-              px={2.5}
-              py={0.5}
-              borderRadius="full"
+          <Box textAlign="center">
+            <Text
+              fontSize="lg"
               fontWeight="bold"
+              color="whiteAlpha.800"
+              fontFamily="mono"
+              letterSpacing="0.2em"
             >
+              BK-AUTO
+            </Text>
+            <Text fontSize="xs" color="whiteAlpha.500">
               Interview Management Portal
-            </Badge>
-          </HStack>
+            </Text>
+          </Box>
+        </VStack>
 
-          <Text fontSize="sm" color="whiteAlpha.600" mb={8} px={2}>
-            Hệ thống quản lý ứng viên và điều phối phỏng vấn tuyển thành viên CLB Nghiên cứu & Ứng dụng Tự động hoá BK-AUTO.
-          </Text>
+        {/* Login Card */}
+        <Box
+          w="full"
+          borderRadius="lg"
+          border="1px solid"
+          borderColor="dark.border"
+          bg="rgba(31, 31, 31, 0.8)"
+          backdropFilter="blur(20px)"
+          boxShadow="0 25px 50px -12px rgba(0, 0, 0, 0.6)"
+        >
+          <Box textAlign="center" pt={6} pb={2} px={6}>
+            <Heading fontSize="xl" fontWeight="semibold" color="white" letterSpacing="-0.01em">
+              Đăng nhập
+            </Heading>
+            <Text fontSize="sm" color="whiteAlpha.500" mt={1}>
+              Sử dụng tài khoản Authentik SSO của CLB để truy cập hệ thống
+            </Text>
+          </Box>
 
-          {/* Login Button */}
-          <VStack spacing={4} align="stretch">
+          <VStack spacing={5} align="stretch" px={6} pb={6} pt={3}>
             <Button
               size="lg"
               colorScheme="primary"
               h="48px"
               fontSize="sm"
-              fontWeight="bold"
-              leftIcon={<FaShieldAlt />}
+              leftIcon={<FaKey />}
+              rightIcon={<FaArrowRight style={{ opacity: 0.5, marginLeft: 'auto' }} />}
               onClick={handleLogin}
+              justifyContent="space-between"
               boxShadow="0 4px 14px rgba(58, 197, 105, 0.35)"
               _hover={{
                 bg: 'primary.600',
@@ -109,18 +140,23 @@ const Login = () => {
                 transform: 'translateY(-1px)',
               }}
             >
-              Đăng nhập qua Authentik SSO
+              Đăng nhập với Authentik SSO
             </Button>
           </VStack>
-
-          {/* Security Note */}
-          <Box mt={8} pt={6} borderTop="1px" borderColor="dark.border">
-            <Text fontSize="11px" color="whiteAlpha.400">
-              Quyền truy cập được xác thực và bảo mật bởi BK-AUTO Single Sign-On (sso.bkauto.vn)
-            </Text>
-          </Box>
         </Box>
-      </Container>
+
+        {/* Footer */}
+        <VStack spacing={3}>
+          <HStack spacing={1.5} justify="center" fontSize="11px" color="whiteAlpha.400">
+            <FaShieldAlt size={10} />
+            <Text>Bảo mật bởi BK-AUTO Single Sign-On (sso.bkauto.vn)</Text>
+          </HStack>
+          <HStack spacing={1.5} fontSize="10px" color="whiteAlpha.300">
+            <Box w="6px" h="6px" borderRadius="full" bg="rgba(58, 197, 105, 0.6)" className="live-pulse" />
+            <Text>System Online</Text>
+          </HStack>
+        </VStack>
+      </VStack>
     </Center>
   );
 };

@@ -2,6 +2,7 @@ import os
 import re
 import secrets
 import uuid
+import json
 from dotenv import load_dotenv
 load_dotenv()
 from flask import Flask, jsonify, request, redirect, send_from_directory
@@ -13,6 +14,7 @@ import logging
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import or_
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, get_jwt
 from authlib.integrations.flask_client import OAuth
 from flask_limiter import Limiter
@@ -36,7 +38,7 @@ WEBSITE_ORIGINS = [o.strip() for o in os.environ.get(
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads', 'cv')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-ALLOWED_CV_EXTENSIONS = {'pdf', 'doc', 'docx'}
+ALLOWED_CV_EXTENSIONS = {'pdf'}
 MAX_CV_SIZE_BYTES = 5 * 1024 * 1024  # 5MB, matches the limit enforced in RecruitmentForm.vue
 
 db = SQLAlchemy(app)
@@ -120,6 +122,8 @@ class Member(db.Model):
     checkin_time = db.Column(db.String(100), nullable=True)
     state = db.Column(db.String(100), nullable=True, default='Chưa checkin')
     note = db.Column(db.String(500), nullable=True)  # New field for notes
+    school = db.Column(db.String(200), nullable=True)
+    application_track = db.Column(db.String(20), default='engineering')
     # Interview participation confirmation portal (/confirm/<token>).
     confirm_token = db.Column(db.String(64), unique=True, nullable=True)
     confirm_password_hash = db.Column(db.String(200), nullable=True)
@@ -136,6 +140,8 @@ def member_to_dict(member):
         'specialist': member.specialist,
         'major_class': member.major_class,
         'student_type': member.student_type,
+        'school': member.school,
+        'application_track': member.application_track or 'engineering',
         'sub_departments': member.sub_departments,
         'linkCV': member.linkCV,
         'checkin_time': member.checkin_time,
@@ -603,7 +609,24 @@ def checkin_member_esp():
         logging.error(f"Error checking in member (ESP): {e}")
         return jsonify({'error': str(e)}), 500
 
-HUST_EMAIL_RE = re.compile(r'^[^@\s]+@sis\.hust\.edu\.vn$', re.IGNORECASE)
+APPLICATION_TRACKS = ('engineering', 'media')
+TRACK_MAIN_DEPARTMENTS = {
+    'engineering': {'ai', 'electrical', 'simulation', 'experiment'},
+    'media': {'communication'},
+}
+SUB_DEPARTMENTS = {'communication', 'english', 'manufacturing'}
+DEPARTMENT_LABELS = {
+    'ai': 'AI for Automobile', 'electrical': 'Điện - Điện tử',
+    'simulation': 'Mô phỏng', 'experiment': 'Thí nghiệm',
+    'communication': 'Truyền thông', 'english': 'Tiếng Anh',
+    'manufacturing': 'Cơ khí',
+}
+TRACK_LABELS = {
+    'engineering': 'Kỹ thuật',
+    'media': 'Truyền thông',
+}
+
+HUST_EMAIL_RE = re.compile(r'^[^@\s]+@(sis\.)?hust\.edu\.vn$', re.IGNORECASE)
 
 def allowed_cv_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_CV_EXTENSIONS
@@ -615,14 +638,35 @@ def apply():
     Member in the 'Chờ duyệt' screening state — it does not go straight into
     the interview-day pipeline."""
     try:
+        application_track = (request.form.get('applicationTrack') or 'engineering').strip()
+        if application_track not in APPLICATION_TRACKS:
+            return jsonify({'message': 'Mảng ứng tuyển không hợp lệ'}), 400
+
         full_name = (request.form.get('fullName') or '').strip()
         identifier = (request.form.get('identifier') or '').strip()
         email = (request.form.get('email') or '').strip()
         phone = (request.form.get('phone') or '').strip()
         major_class = (request.form.get('majorClass') or '').strip()
         student_type = (request.form.get('studentType') or '').strip()
-        main_department = (request.form.get('mainDepartment') or '').strip()
-        sub_departments = request.form.get('subDepartments') or '[]'
+        raw_main_dept = (request.form.get('mainDepartment') or '').strip()
+
+        if application_track == 'media':
+            main_department = 'communication'
+        else:
+            main_department = raw_main_dept
+            if main_department not in TRACK_MAIN_DEPARTMENTS['engineering']:
+                return jsonify({'message': 'Mảng chuyên môn chính không hợp lệ'}), 400
+
+        raw_sub = request.form.get('subDepartments') or '[]'
+        try:
+            parsed_sub = json.loads(raw_sub)
+            if isinstance(parsed_sub, list):
+                sub_departments = json.dumps([item for item in parsed_sub if item in SUB_DEPARTMENTS])
+            else:
+                sub_departments = '[]'
+        except Exception:
+            sub_departments = '[]'
+
         questions = request.form.get('questions') or ''
 
         required = {'fullName': full_name, 'identifier': identifier, 'email': email,
@@ -632,16 +676,26 @@ def apply():
             return jsonify({'message': f"Thiếu thông tin bắt buộc: {', '.join(missing)}"}), 400
 
         if student_type == 'hust' and not HUST_EMAIL_RE.match(email):
-            return jsonify({'message': 'Sinh viên HUST phải dùng email @sis.hust.edu.vn'}), 400
+            return jsonify({'message': 'Sinh viên HUST phải dùng email @sis.hust.edu.vn hoặc @hust.edu.vn'}), 400
 
-        if Member.query.filter_by(MSSV=identifier).first():
+        if student_type == 'external':
+            school = identifier
+            mssv_key = email.lower()
+        else:
+            school = None
+            mssv_key = identifier
+
+        dup = Member.query.filter(
+            or_(Member.email == email, Member.MSSV == mssv_key)
+        ).first()
+        if dup:
             return jsonify({'message': 'Bạn đã nộp đơn rồi'}), 409
 
         link_cv = None
         cv_file = request.files.get('cvFile')
         if cv_file and cv_file.filename:
             if not allowed_cv_file(cv_file.filename):
-                return jsonify({'message': 'CV chỉ chấp nhận định dạng PDF, DOC hoặc DOCX'}), 400
+                return jsonify({'message': 'CV chỉ chấp nhận định dạng PDF'}), 400
             cv_file.seek(0, os.SEEK_END)
             size = cv_file.tell()
             cv_file.seek(0)
@@ -653,12 +707,14 @@ def apply():
 
         new_member = Member(
             name=full_name,
-            MSSV=identifier,
+            MSSV=mssv_key,
             email=email,
             phone=phone,
             specialist=main_department,
             major_class=major_class,
             student_type=student_type,
+            school=school,
+            application_track=application_track,
             sub_departments=sub_departments,
             linkCV=link_cv,
             state='Chờ duyệt',
@@ -667,10 +723,12 @@ def apply():
         db.session.add(new_member)
         db.session.commit()
 
+        track_label = TRACK_LABELS.get(application_track, application_track)
+        dept_label = DEPARTMENT_LABELS.get(new_member.specialist, new_member.specialist)
         record_audit_log(
             member_id=new_member.id,
             action='Nộp hồ sơ ứng tuyển',
-            details=f"Ứng viên nộp hồ sơ trực tuyến tuyển thành viên mảng {new_member.specialist}",
+            details=f"Ứng viên nộp hồ sơ {track_label} - mảng {dept_label}",
             actor={'username': new_member.MSSV, 'name': new_member.name, 'email': new_member.email},
             actor_type='candidate'
         )
@@ -684,7 +742,7 @@ def apply():
         return jsonify({'message': 'Bạn đã nộp đơn rồi'}), 409
     except Exception as e:
         logging.error(f"Error receiving application: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'message': f'Có lỗi xảy ra trên hệ thống: {str(e)}', 'error': str(e)}), 500
 
 @app.route('/api/uploads/cv/<path:filename>', methods=['GET'])
 @jwt_required()

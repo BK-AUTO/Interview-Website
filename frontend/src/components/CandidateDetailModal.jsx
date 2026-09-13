@@ -42,18 +42,19 @@ import {
   FaKey,
 } from 'react-icons/fa';
 import api from '../api/axios';
+import { DEPARTMENT_LABELS, TRACK_LABELS } from '../config';
 
 const STATE_BADGE_PROPS = {
-  'Chờ duyệt': { bg: 'rgba(115, 115, 115, 0.15)', color: 'whiteAlpha.700', borderColor: 'rgba(115, 115, 115, 0.3)' },
-  'Đậu vòng đơn': { bg: 'rgba(24, 144, 255, 0.15)', color: 'info.500', borderColor: 'rgba(24, 144, 255, 0.3)' },
-  'Trượt vòng đơn': { bg: 'rgba(245, 34, 45, 0.15)', color: 'danger.500', borderColor: 'rgba(245, 34, 45, 0.3)' },
-  'Đã xác nhận': { bg: 'rgba(58, 197, 105, 0.15)', color: 'primary.500', borderColor: 'rgba(58, 197, 105, 0.3)' },
-  'Xin đổi lịch': { bg: 'rgba(250, 173, 20, 0.15)', color: 'warning.500', borderColor: 'rgba(250, 173, 20, 0.3)' },
-  'Chưa checkin': { bg: 'rgba(115, 115, 115, 0.15)', color: 'whiteAlpha.600', borderColor: 'rgba(115, 115, 115, 0.25)' },
-  'Đã checkin': { bg: 'rgba(82, 196, 26, 0.15)', color: 'success.500', borderColor: 'rgba(82, 196, 26, 0.3)' },
-  'Gọi PV': { bg: 'rgba(250, 173, 20, 0.15)', color: 'warning.500', borderColor: 'rgba(250, 173, 20, 0.3)' },
-  'Đang phỏng vấn': { bg: 'rgba(114, 46, 209, 0.18)', color: 'secondary.500', borderColor: 'rgba(114, 46, 209, 0.4)' },
-  'Đã phỏng vấn': { bg: 'rgba(58, 197, 105, 0.15)', color: 'primary.500', borderColor: 'rgba(58, 197, 105, 0.3)' },
+  'Chờ duyệt': { bg: 'gray.100', color: 'gray.600', borderColor: 'gray.200' },
+  'Đậu vòng đơn': { bg: 'rgba(24, 144, 255, 0.12)', color: 'info.600', borderColor: 'rgba(24, 144, 255, 0.3)' },
+  'Trượt vòng đơn': { bg: 'rgba(245, 34, 45, 0.12)', color: 'danger.600', borderColor: 'rgba(245, 34, 45, 0.3)' },
+  'Đã xác nhận': { bg: 'rgba(58, 197, 105, 0.12)', color: 'primary.600', borderColor: 'rgba(58, 197, 105, 0.3)' },
+  'Xin đổi lịch': { bg: 'rgba(250, 173, 20, 0.12)', color: 'warning.700', borderColor: 'rgba(250, 173, 20, 0.3)' },
+  'Chưa checkin': { bg: 'gray.100', color: 'gray.500', borderColor: 'gray.200' },
+  'Đã checkin': { bg: 'rgba(82, 196, 26, 0.12)', color: 'success.700', borderColor: 'rgba(82, 196, 26, 0.3)' },
+  'Gọi PV': { bg: 'rgba(250, 173, 20, 0.12)', color: 'warning.700', borderColor: 'rgba(250, 173, 20, 0.3)' },
+  'Đang phỏng vấn': { bg: 'rgba(114, 46, 209, 0.12)', color: 'secondary.600', borderColor: 'rgba(114, 46, 209, 0.35)' },
+  'Đã phỏng vấn': { bg: 'rgba(58, 197, 105, 0.12)', color: 'primary.600', borderColor: 'rgba(58, 197, 105, 0.3)' },
 };
 
 const ACTION_ICONS = {
@@ -74,17 +75,17 @@ const ACTION_ICONS = {
 };
 
 const ACTION_COLORS = {
-  'Nộp hồ sơ ứng tuyển': { bg: 'rgba(24, 144, 255, 0.15)', color: 'info.500', border: 'rgba(24, 144, 255, 0.3)' },
-  'Duyệt đậu vòng đơn': { bg: 'rgba(58, 197, 105, 0.15)', color: 'primary.500', border: 'rgba(58, 197, 105, 0.3)' },
-  'Duyệt trượt vòng đơn': { bg: 'rgba(245, 34, 45, 0.15)', color: 'danger.500', border: 'rgba(245, 34, 45, 0.3)' },
-  'Xác nhận tham gia phỏng vấn': { bg: 'rgba(82, 196, 26, 0.15)', color: 'success.500', border: 'rgba(82, 196, 26, 0.3)' },
-  'Yêu cầu đổi lịch phỏng vấn': { bg: 'rgba(250, 173, 20, 0.15)', color: 'warning.500', border: 'rgba(250, 173, 20, 0.3)' },
-  'Tạo lại mật khẩu xác nhận': { bg: 'rgba(250, 173, 20, 0.15)', color: 'warning.500', border: 'rgba(250, 173, 20, 0.3)' },
-  'Check-in tại sự kiện': { bg: 'rgba(82, 196, 26, 0.15)', color: 'success.500', border: 'rgba(82, 196, 26, 0.3)' },
-  'Gọi phỏng vấn': { bg: 'rgba(250, 173, 20, 0.15)', color: 'warning.500', border: 'rgba(250, 173, 20, 0.3)' },
-  'Bắt đầu phỏng vấn': { bg: 'rgba(114, 46, 209, 0.18)', color: 'secondary.500', border: 'rgba(114, 46, 209, 0.4)' },
-  'Hoàn thành phỏng vấn': { bg: 'rgba(58, 197, 105, 0.15)', color: 'primary.500', border: 'rgba(58, 197, 105, 0.3)' },
-  'Cập nhật thông tin': { bg: 'rgba(115, 115, 115, 0.15)', color: 'whiteAlpha.800', border: 'rgba(115, 115, 115, 0.3)' },
+  'Nộp hồ sơ ứng tuyển': { bg: 'rgba(24, 144, 255, 0.12)', color: 'info.600', border: 'rgba(24, 144, 255, 0.3)' },
+  'Duyệt đậu vòng đơn': { bg: 'rgba(58, 197, 105, 0.12)', color: 'primary.600', border: 'rgba(58, 197, 105, 0.3)' },
+  'Duyệt trượt vòng đơn': { bg: 'rgba(245, 34, 45, 0.12)', color: 'danger.600', border: 'rgba(245, 34, 45, 0.3)' },
+  'Xác nhận tham gia phỏng vấn': { bg: 'rgba(82, 196, 26, 0.12)', color: 'success.700', border: 'rgba(82, 196, 26, 0.3)' },
+  'Yêu cầu đổi lịch phỏng vấn': { bg: 'rgba(250, 173, 20, 0.12)', color: 'warning.700', border: 'rgba(250, 173, 20, 0.3)' },
+  'Tạo lại mật khẩu xác nhận': { bg: 'rgba(250, 173, 20, 0.12)', color: 'warning.700', border: 'rgba(250, 173, 20, 0.3)' },
+  'Check-in tại sự kiện': { bg: 'rgba(82, 196, 26, 0.12)', color: 'success.700', border: 'rgba(82, 196, 26, 0.3)' },
+  'Gọi phỏng vấn': { bg: 'rgba(250, 173, 20, 0.12)', color: 'warning.700', border: 'rgba(250, 173, 20, 0.3)' },
+  'Bắt đầu phỏng vấn': { bg: 'rgba(114, 46, 209, 0.12)', color: 'secondary.600', border: 'rgba(114, 46, 209, 0.35)' },
+  'Hoàn thành phỏng vấn': { bg: 'rgba(58, 197, 105, 0.12)', color: 'primary.600', border: 'rgba(58, 197, 105, 0.3)' },
+  'Cập nhật thông tin': { bg: 'gray.100', color: 'gray.600', border: 'gray.200' },
 };
 
 const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
@@ -122,9 +123,9 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
   if (!candidate) return null;
 
   const stateProps = STATE_BADGE_PROPS[candidate.state] || {
-    bg: 'dark.700',
-    color: 'whiteAlpha.700',
-    borderColor: 'dark.border',
+    bg: 'gray.100',
+    color: 'gray.600',
+    borderColor: 'gray.200',
   };
 
   const parseSubDepts = () => {
@@ -143,16 +144,16 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="2xl" scrollBehavior="inside">
-      <ModalOverlay bg="blackAlpha.750" backdropFilter="blur(4px)" />
+      <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(4px)" />
       <ModalContent
-        bg="dark.800"
+        bg="white"
         borderWidth="1px"
-        borderColor="dark.border"
-        color="white"
+        borderColor="gray.200"
+        color="gray.900"
         borderRadius="xl"
         maxW={{ base: '95%', md: '750px' }}
       >
-        <ModalHeader borderBottomWidth="1px" borderColor="dark.border" pb={4}>
+        <ModalHeader borderBottomWidth="1px" borderColor="gray.200" pb={4}>
           <Flex justify="space-between" align="center" pr={6}>
             <HStack spacing={3}>
               <Box
@@ -173,9 +174,21 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
               </Box>
               <Box>
                 <HStack spacing={2}>
-                  <Text fontSize="lg" fontWeight="bold" color="white">
+                  <Text fontSize="lg" fontWeight="bold" color="gray.900">
                     {candidate.name}
                   </Text>
+                  <Badge
+                    fontSize="11px"
+                    px={2}
+                    py={0.5}
+                    borderRadius="md"
+                    borderWidth="1px"
+                    bg={candidate.application_track === 'media' ? 'rgba(250, 140, 22, 0.12)' : 'rgba(24, 144, 255, 0.12)'}
+                    color={candidate.application_track === 'media' ? 'orange.600' : 'info.600'}
+                    borderColor={candidate.application_track === 'media' ? 'rgba(250, 140, 22, 0.3)' : 'rgba(24, 144, 255, 0.3)'}
+                  >
+                    {TRACK_LABELS[candidate.application_track] || (candidate.application_track === 'media' ? 'Truyền thông' : 'Kỹ thuật')}
+                  </Badge>
                   <Badge
                     fontSize="11px"
                     px={2}
@@ -189,84 +202,85 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
                     {candidate.state}
                   </Badge>
                 </HStack>
-                <Text fontSize="xs" color="whiteAlpha.500">
-                  MSSV: {candidate.MSSV} • Mảng: {candidate.specialist || 'Chung'}
+                <Text fontSize="xs" color="gray.500">
+                  {candidate.student_type === 'external' ? `Trường: ${candidate.school || candidate.MSSV}` : `MSSV: ${candidate.MSSV}`}
+                  {' • '}Mảng: {DEPARTMENT_LABELS[candidate.specialist] || candidate.specialist || 'Chung'}
                 </Text>
               </Box>
             </HStack>
           </Flex>
         </ModalHeader>
-        <ModalCloseButton color="whiteAlpha.600" _hover={{ color: 'white' }} />
+        <ModalCloseButton color="gray.500" _hover={{ color: 'gray.900' }} />
 
         <ModalBody py={5}>
           {/* Section 1: Candidate Full Info */}
           <Box mb={6}>
-            <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" letterSpacing="wider" color="whiteAlpha.400" mb={3}>
+            <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" letterSpacing="wider" color="gray.400" mb={3}>
               Thông tin ứng viên
             </Text>
             <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3}>
-              <Box p={3} borderRadius="lg" bg="dark.750" borderWidth="1px" borderColor="dark.border">
-                <HStack spacing={2} color="whiteAlpha.500" fontSize="xs" mb={1}>
+              <Box p={3} borderRadius="lg" bg="gray.50" borderWidth="1px" borderColor="gray.200">
+                <HStack spacing={2} color="gray.500" fontSize="xs" mb={1}>
                   <FaIdCard />
-                  <Text>MSSV / Mã định danh</Text>
+                  <Text>{candidate.student_type === 'external' ? 'Trường đang theo học' : 'MSSV / Mã định danh'}</Text>
                 </HStack>
-                <Text fontSize="sm" fontWeight="semibold" color="white">
-                  {candidate.MSSV}
+                <Text fontSize="sm" fontWeight="semibold" color="gray.900">
+                  {candidate.student_type === 'external' ? (candidate.school || candidate.MSSV) : candidate.MSSV}
                 </Text>
               </Box>
 
-              <Box p={3} borderRadius="lg" bg="dark.750" borderWidth="1px" borderColor="dark.border">
-                <HStack spacing={2} color="whiteAlpha.500" fontSize="xs" mb={1}>
+              <Box p={3} borderRadius="lg" bg="gray.50" borderWidth="1px" borderColor="gray.200">
+                <HStack spacing={2} color="gray.500" fontSize="xs" mb={1}>
                   <FaPhoneAlt />
                   <Text>Số điện thoại</Text>
                 </HStack>
-                <Text fontSize="sm" fontWeight="semibold" color="white">
+                <Text fontSize="sm" fontWeight="semibold" color="gray.900">
                   {candidate.phone || 'Chưa cập nhật'}
                 </Text>
               </Box>
 
-              <Box p={3} borderRadius="lg" bg="dark.750" borderWidth="1px" borderColor="dark.border">
-                <HStack spacing={2} color="whiteAlpha.500" fontSize="xs" mb={1}>
+              <Box p={3} borderRadius="lg" bg="gray.50" borderWidth="1px" borderColor="gray.200">
+                <HStack spacing={2} color="gray.500" fontSize="xs" mb={1}>
                   <FaEnvelope />
                   <Text>Email</Text>
                 </HStack>
-                <Text fontSize="sm" fontWeight="semibold" color="white" isTruncated>
+                <Text fontSize="sm" fontWeight="semibold" color="gray.900" isTruncated>
                   {candidate.email || 'Chưa cập nhật'}
                 </Text>
               </Box>
 
-              <Box p={3} borderRadius="lg" bg="dark.750" borderWidth="1px" borderColor="dark.border">
-                <HStack spacing={2} color="whiteAlpha.500" fontSize="xs" mb={1}>
+              <Box p={3} borderRadius="lg" bg="gray.50" borderWidth="1px" borderColor="gray.200">
+                <HStack spacing={2} color="gray.500" fontSize="xs" mb={1}>
                   <FaGraduationCap />
                   <Text>Lớp / Chuyên ngành</Text>
                 </HStack>
-                <Text fontSize="sm" fontWeight="semibold" color="white">
+                <Text fontSize="sm" fontWeight="semibold" color="gray.900">
                   {candidate.major_class || 'Chưa cập nhật'}
                   {candidate.student_type === 'hust' ? ' (HUST)' : candidate.student_type === 'external' ? ' (Ngoài HUST)' : ''}
                 </Text>
               </Box>
 
-              <Box p={3} borderRadius="lg" bg="dark.750" borderWidth="1px" borderColor="dark.border">
-                <HStack spacing={2} color="whiteAlpha.500" fontSize="xs" mb={1}>
+              <Box p={3} borderRadius="lg" bg="gray.50" borderWidth="1px" borderColor="gray.200">
+                <HStack spacing={2} color="gray.500" fontSize="xs" mb={1}>
                   <FaLayerGroup />
                   <Text>Mảng chuyên môn chính</Text>
                 </HStack>
                 <Badge colorScheme="primary" variant="subtle" fontSize="xs" borderRadius="md" px={2}>
-                  {candidate.specialist || 'Chung'}
+                  {DEPARTMENT_LABELS[candidate.specialist] || candidate.specialist || 'Chung'}
                 </Badge>
                 {subDepts.length > 0 && (
                   <HStack spacing={1} mt={1.5} flexWrap="wrap">
                     {subDepts.map((d, i) => (
                       <Badge key={i} size="sm" variant="outline" fontSize="10px" colorScheme="gray">
-                        {d}
+                        {DEPARTMENT_LABELS[d] || d}
                       </Badge>
                     ))}
                   </HStack>
                 )}
               </Box>
 
-              <Box p={3} borderRadius="lg" bg="dark.750" borderWidth="1px" borderColor="dark.border">
-                <HStack spacing={2} color="whiteAlpha.500" fontSize="xs" mb={1}>
+              <Box p={3} borderRadius="lg" bg="gray.50" borderWidth="1px" borderColor="gray.200">
+                <HStack spacing={2} color="gray.500" fontSize="xs" mb={1}>
                   <FaFilePdf />
                   <Text>Hồ sơ CV</Text>
                 </HStack>
@@ -275,53 +289,53 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
                     href={candidate.linkCV.startsWith('http') ? candidate.linkCV : candidate.linkCV}
                     target="_blank"
                     rel="noopener noreferrer"
-                    color="primary.400"
+                    color="primary.600"
                     fontSize="sm"
                     fontWeight="medium"
                     display="inline-flex"
                     alignItems="center"
                     gap={1.5}
-                    _hover={{ textDecoration: 'underline', color: 'primary.300' }}
+                    _hover={{ textDecoration: 'underline', color: 'primary.700' }}
                   >
                     Xem file CV <FaExternalLinkAlt size={10} />
                   </Link>
                 ) : (
-                  <Text fontSize="sm" color="whiteAlpha.400">Không có CV</Text>
+                  <Text fontSize="sm" color="gray.400">Không có CV</Text>
                 )}
               </Box>
             </SimpleGrid>
 
             {candidate.reschedule_request && (
               <Box mt={3} p={3} borderRadius="lg" bg="rgba(250, 173, 20, 0.08)" borderWidth="1px" borderColor="rgba(250, 173, 20, 0.25)">
-                <Text fontSize="xs" fontWeight="bold" color="warning.500" mb={1}>
+                <Text fontSize="xs" fontWeight="bold" color="warning.700" mb={1}>
                   ⚠️ Lý do xin đổi lịch:
                 </Text>
-                <Text fontSize="xs" color="whiteAlpha.900">
+                <Text fontSize="xs" color="gray.700">
                   {candidate.reschedule_request}
                 </Text>
               </Box>
             )}
 
             {candidate.note && (
-              <Box mt={3} p={3} borderRadius="lg" bg="dark.750" borderWidth="1px" borderColor="dark.border">
-                <Text fontSize="xs" fontWeight="bold" color="whiteAlpha.500" mb={1}>
+              <Box mt={3} p={3} borderRadius="lg" bg="gray.50" borderWidth="1px" borderColor="gray.200">
+                <Text fontSize="xs" fontWeight="bold" color="gray.500" mb={1}>
                   Câu hỏi / Ghi chú từ ứng viên:
                 </Text>
-                <Text fontSize="xs" color="whiteAlpha.800" whiteSpace="pre-wrap">
+                <Text fontSize="xs" color="gray.700" whiteSpace="pre-wrap">
                   {candidate.note}
                 </Text>
               </Box>
             )}
           </Box>
 
-          <Divider borderColor="dark.border" mb={5} />
+          <Divider borderColor="gray.200" mb={5} />
 
           {/* Section 2: Audit Logs Timeline */}
           <Box>
             <Flex justify="space-between" align="center" mb={3}>
               <HStack spacing={2}>
                 <Box as={FaHistory} color="primary.500" />
-                <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" letterSpacing="wider" color="whiteAlpha.400">
+                <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" letterSpacing="wider" color="gray.400">
                   Lịch sử thao tác & Tiến trình ({logs.length})
                 </Text>
               </HStack>
@@ -330,8 +344,8 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
                   icon={<FaSyncAlt />}
                   size="xs"
                   variant="ghost"
-                  color="whiteAlpha.600"
-                  _hover={{ color: 'primary.500', bg: 'dark.700' }}
+                  color="gray.500"
+                  _hover={{ color: 'primary.500', bg: 'gray.100' }}
                   onClick={fetchLogs}
                   isLoading={loading}
                   aria-label="Refresh logs"
@@ -342,11 +356,11 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
             {loading ? (
               <Flex justify="center" align="center" py={8}>
                 <Spinner size="md" color="primary.500" mr={3} />
-                <Text fontSize="sm" color="whiteAlpha.600">Đang tải lịch sử...</Text>
+                <Text fontSize="sm" color="gray.500">Đang tải lịch sử...</Text>
               </Flex>
             ) : logs.length === 0 ? (
-              <Box textAlign="center" py={8} borderRadius="lg" bg="dark.750" borderWidth="1px" borderColor="dark.border">
-                <Text fontSize="sm" color="whiteAlpha.500">Chưa có bản ghi lịch sử thao tác nào</Text>
+              <Box textAlign="center" py={8} borderRadius="lg" bg="gray.50" borderWidth="1px" borderColor="gray.200">
+                <Text fontSize="sm" color="gray.500">Chưa có bản ghi lịch sử thao tác nào</Text>
               </Box>
             ) : (
               <VStack spacing={0} align="stretch" position="relative" pl={4}>
@@ -357,7 +371,7 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
                   top="12px"
                   bottom="12px"
                   w="2px"
-                  bg="dark.border"
+                  bg="gray.200"
                   zIndex={0}
                 />
 
@@ -365,7 +379,7 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
                   const IconComp = ACTION_ICONS[log.action] || FaHistory;
                   const colorConfig = ACTION_COLORS[log.action] || {
                     bg: 'rgba(58, 197, 105, 0.12)',
-                    color: 'primary.500',
+                    color: 'primary.600',
                     border: 'rgba(58, 197, 105, 0.3)',
                   };
 
@@ -376,7 +390,7 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
                         w="24px"
                         h="24px"
                         borderRadius="full"
-                        bg="dark.800"
+                        bg="white"
                         borderWidth="2px"
                         borderColor={colorConfig.color}
                         display="flex"
@@ -395,10 +409,10 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
                         flex={1}
                         p={3}
                         borderRadius="lg"
-                        bg="dark.750"
+                        bg="gray.50"
                         borderWidth="1px"
-                        borderColor="dark.border"
-                        _hover={{ borderColor: 'whiteAlpha.300', bg: 'dark.700' }}
+                        borderColor="gray.200"
+                        _hover={{ borderColor: 'gray.300', bg: 'white' }}
                         transition="all 0.2s"
                       >
                         <Flex justify="space-between" align={{ base: 'flex-start', sm: 'center' }} flexWrap="wrap" gap={2} mb={1}>
@@ -423,22 +437,22 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
                               {log.actor_type === 'admin' ? 'Admin' : log.actor_type === 'candidate' ? 'Ứng viên' : 'Hệ thống'}
                             </Badge>
                           </HStack>
-                          <Text fontSize="11px" color="whiteAlpha.400">
+                          <Text fontSize="11px" color="gray.400">
                             {log.created_at}
                           </Text>
                         </Flex>
 
-                        <Text fontSize="xs" fontWeight="medium" color="white" mt={1}>
-                          Người thực hiện: <Text as="span" color="primary.400" fontWeight="bold">{log.actor_name || log.actor_username || 'Hệ thống'}</Text>
+                        <Text fontSize="xs" fontWeight="medium" color="gray.900" mt={1}>
+                          Người thực hiện: <Text as="span" color="primary.600" fontWeight="bold">{log.actor_name || log.actor_username || 'Hệ thống'}</Text>
                           {log.actor_username && log.actor_name && log.actor_username !== log.actor_name && (
-                            <Text as="span" color="whiteAlpha.500" ml={1}>
+                            <Text as="span" color="gray.500" ml={1}>
                               (@{log.actor_username})
                             </Text>
                           )}
                         </Text>
 
                         {log.details && (
-                          <Text fontSize="xs" color="whiteAlpha.700" mt={1} pl={2} borderLeft="2px solid" borderColor="dark.border">
+                          <Text fontSize="xs" color="gray.600" mt={1} pl={2} borderLeft="2px solid" borderColor="gray.200">
                             {log.details}
                           </Text>
                         )}
@@ -451,7 +465,7 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
           </Box>
         </ModalBody>
 
-        <ModalFooter borderTopWidth="1px" borderColor="dark.border">
+        <ModalFooter borderTopWidth="1px" borderColor="gray.200">
           <Button variant="outline" size="sm" onClick={onClose}>
             Đóng
           </Button>

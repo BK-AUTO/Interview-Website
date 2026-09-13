@@ -40,11 +40,11 @@ const Checkin = ({ isOpen, onClose }) => {
     setLoading(true);
     try {
       const response = await api.post('/api/checkin', { uid: uid.trim() });
-      
+
       if (response.data && response.data.member) {
         const { name, specialist, checkin_time } = response.data.member;
         const displayTime = checkin_time || 'N/A';
-        
+
         toast({
           title: "Check-in thành công!",
           description: `Ứng viên ${name} (${specialist || 'Chưa phân mảng'}) đã check-in lúc ${displayTime}`,
@@ -59,7 +59,7 @@ const Checkin = ({ isOpen, onClose }) => {
       console.error('Check-in error:', error);
       const errorResponse = error.response?.data || {};
       const errorMessage = errorResponse.message || errorResponse.error || 'Không thể check-in. Vui lòng thử lại.';
-      
+
       toast({
         title: "Check-in thất bại",
         description: errorMessage,
@@ -75,31 +75,31 @@ const Checkin = ({ isOpen, onClose }) => {
   return (
     <Modal isOpen={isOpen} onClose={onClose} isCentered size="md">
       <ModalOverlay bg="blackAlpha.800" backdropFilter="blur(4px)" />
-      <ModalContent bg="dark.800" borderColor="dark.border" borderWidth="1px" borderRadius="xl">
-        <ModalHeader borderBottomWidth="1px" borderColor="dark.border" py={4}>
+      <ModalContent bg="white" borderColor="gray.200" borderWidth="1px" borderRadius="xl">
+        <ModalHeader borderBottomWidth="1px" borderColor="gray.200" py={4}>
           <HStack spacing={3}>
             <Box p={2} borderRadius="lg" bg="rgba(58, 197, 105, 0.12)" color="primary.500">
               <FaCheckCircle size={18} />
             </Box>
             <Box>
-              <Text fontSize="md" fontWeight="bold" color="white">
+              <Text fontSize="md" fontWeight="bold" color="gray.900">
                 Check-in Ứng viên
               </Text>
-              <Text fontSize="xs" fontWeight="normal" color="whiteAlpha.600">
+              <Text fontSize="xs" fontWeight="normal" color="gray.500">
                 Nhập MSSV để ghi nhận ứng viên đã có mặt
               </Text>
             </Box>
           </HStack>
         </ModalHeader>
-        <ModalCloseButton color="whiteAlpha.600" />
-        
+        <ModalCloseButton color="gray.500" />
+
         <ModalBody py={6}>
           <VStack spacing={4} align="stretch">
             <FormControl isRequired>
-              <FormLabel fontSize="sm" fontWeight="medium" color="whiteAlpha.800">
+              <FormLabel fontSize="sm" fontWeight="medium" color="gray.700">
                 Mã số sinh viên (MSSV)
               </FormLabel>
-              <Input 
+              <Input
                 placeholder="VD: 20210001"
                 value={uid}
                 onChange={(e) => setUid(e.target.value)}
@@ -109,19 +109,19 @@ const Checkin = ({ isOpen, onClose }) => {
                 fontSize="md"
               />
             </FormControl>
-            <Text fontSize="xs" color="whiteAlpha.500">
+            <Text fontSize="xs" color="gray.400">
               * Chỉ những ứng viên đã xác nhận tham gia phỏng vấn mới đủ điều kiện check-in.
             </Text>
           </VStack>
         </ModalBody>
 
-        <ModalFooter borderTopWidth="1px" borderColor="dark.border">
-          <Button variant="ghost" mr={3} onClick={onClose} isDisabled={loading} color="whiteAlpha.700">
+        <ModalFooter borderTopWidth="1px" borderColor="gray.200">
+          <Button variant="ghost" mr={3} onClick={onClose} isDisabled={loading} color="gray.600">
             Hủy
           </Button>
-          <Button 
-            colorScheme="primary" 
-            onClick={handleCheckin} 
+          <Button
+            colorScheme="primary"
+            onClick={handleCheckin}
             isLoading={loading}
             loadingText="Đang ghi nhận..."
           >

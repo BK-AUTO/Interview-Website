@@ -116,27 +116,27 @@ const CheckinQr = ({ isOpen, onClose }) => {
   return (
     <Modal isOpen={isOpen} onClose={onClose} isCentered size="lg">
       <ModalOverlay bg="blackAlpha.800" backdropFilter="blur(4px)" />
-      <ModalContent bg="dark.800" borderColor="dark.border" borderWidth="1px" borderRadius="xl">
-        <ModalHeader borderBottomWidth="1px" borderColor="dark.border" py={4}>
+      <ModalContent bg="white" borderColor="gray.200" borderWidth="1px" borderRadius="xl">
+        <ModalHeader borderBottomWidth="1px" borderColor="gray.200" py={4}>
           <HStack spacing={3}>
             <Box p={2} borderRadius="lg" bg="rgba(24, 144, 255, 0.12)" color="info.500">
               <FaQrcode size={18} />
             </Box>
             <Box>
-              <Text fontSize="md" fontWeight="bold" color="white">
+              <Text fontSize="md" fontWeight="bold" color="gray.900">
                 Quét mã QR Check-in
               </Text>
-              <Text fontSize="xs" fontWeight="normal" color="whiteAlpha.600">
+              <Text fontSize="xs" fontWeight="normal" color="gray.500">
                 Đưa mã QR trước camera hoặc nhập MSSV/UID bên dưới
               </Text>
             </Box>
           </HStack>
         </ModalHeader>
-        <ModalCloseButton color="whiteAlpha.600" />
-        
+        <ModalCloseButton color="gray.500" />
+
         <ModalBody py={5}>
           <VStack spacing={4} align="stretch">
-            {/* Video container */}
+            {/* Video container — kept dark like a camera viewfinder */}
             <Box
               p={2}
               borderWidth="1px"
@@ -175,10 +175,10 @@ const CheckinQr = ({ isOpen, onClose }) => {
             </Box>
 
             <FormControl>
-              <FormLabel fontSize="sm" fontWeight="medium" color="whiteAlpha.800">
+              <FormLabel fontSize="sm" fontWeight="medium" color="gray.700">
                 Mã đã quét / MSSV
               </FormLabel>
-              <Input 
+              <Input
                 placeholder="Dữ liệu từ mã QR hoặc nhập tay MSSV"
                 value={uid}
                 onChange={(e) => setUid(e.target.value)}
@@ -188,13 +188,13 @@ const CheckinQr = ({ isOpen, onClose }) => {
           </VStack>
         </ModalBody>
 
-        <ModalFooter borderTopWidth="1px" borderColor="dark.border">
-          <Button variant="ghost" mr={3} onClick={onClose} isDisabled={loading} color="whiteAlpha.700">
+        <ModalFooter borderTopWidth="1px" borderColor="gray.200">
+          <Button variant="ghost" mr={3} onClick={onClose} isDisabled={loading} color="gray.600">
             Hủy
           </Button>
-          <Button 
-            colorScheme="primary" 
-            onClick={handleCheckin} 
+          <Button
+            colorScheme="primary"
+            onClick={handleCheckin}
             isLoading={loading}
             loadingText="Đang check-in..."
           >

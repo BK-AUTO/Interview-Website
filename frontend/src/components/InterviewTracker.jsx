@@ -50,18 +50,18 @@ const InterviewTracker = ({ members = [] }) => {
             <FaChartBar size={20} />
           </Box>
           <Box>
-            <Heading fontSize={{ base: 'xl', md: '2xl' }} fontWeight="bold" color="white">
+            <Heading fontSize={{ base: 'xl', md: '2xl' }} fontWeight="bold" color="gray.900">
               Bảng theo dõi phỏng vấn trực tiếp
             </Heading>
-            <Text fontSize="xs" color="whiteAlpha.600">
+            <Text fontSize="xs" color="gray.500">
               Cập nhật thời gian thực các phòng phỏng vấn và ứng viên đang trong lượt
             </Text>
           </Box>
         </HStack>
 
-        <HStack spacing={2} p={2} px={3} borderRadius="full" bg="dark.800" borderWidth="1px" borderColor="dark.border">
+        <HStack spacing={2} p={2} px={3} borderRadius="full" bg="white" borderWidth="1px" borderColor="gray.200">
           <Box w="8px" h="8px" borderRadius="full" bg="primary.500" className="live-pulse" />
-          <Text fontSize="xs" fontWeight="bold" color="primary.500" textTransform="uppercase" letterSpacing="0.05em">
+          <Text fontSize="xs" fontWeight="bold" color="primary.600" textTransform="uppercase" letterSpacing="0.05em">
             Live Updates
           </Text>
         </HStack>
@@ -69,10 +69,10 @@ const InterviewTracker = ({ members = [] }) => {
 
       {/* KPI Stat Cards */}
       <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4} mb={6}>
-        <Box p={4} borderRadius="xl" bg="dark.800" borderWidth="1px" borderColor="dark.border">
+        <Box p={4} borderRadius="xl" bg="white" borderWidth="1px" borderColor="gray.200">
           <Flex justify="space-between" align="center">
             <Box>
-              <Text fontSize="xs" fontWeight="semibold" color="whiteAlpha.600" textTransform="uppercase" letterSpacing="0.05em">
+              <Text fontSize="xs" fontWeight="semibold" color="gray.500" textTransform="uppercase" letterSpacing="0.05em">
                 Đang trong phòng phỏng vấn
               </Text>
               <Text fontSize="2xl" fontWeight="bold" color="secondary.500" mt={1}>
@@ -85,17 +85,17 @@ const InterviewTracker = ({ members = [] }) => {
           </Flex>
         </Box>
 
-        <Box p={4} borderRadius="xl" bg="dark.800" borderWidth="1px" borderColor="dark.border">
+        <Box p={4} borderRadius="xl" bg="white" borderWidth="1px" borderColor="gray.200">
           <Flex justify="space-between" align="center">
             <Box>
-              <Text fontSize="xs" fontWeight="semibold" color="whiteAlpha.600" textTransform="uppercase" letterSpacing="0.05em">
+              <Text fontSize="xs" fontWeight="semibold" color="gray.500" textTransform="uppercase" letterSpacing="0.05em">
                 Đang được gọi vào phòng
               </Text>
-              <Text fontSize="2xl" fontWeight="bold" color="warning.500" mt={1}>
+              <Text fontSize="2xl" fontWeight="bold" color="warning.600" mt={1}>
                 {callingCount} ứng viên
               </Text>
             </Box>
-            <Box p={3} borderRadius="xl" bg="rgba(250, 173, 20, 0.15)" color="warning.500">
+            <Box p={3} borderRadius="xl" bg="rgba(250, 173, 20, 0.15)" color="warning.600">
               <FaBullhorn size={20} />
             </Box>
           </Flex>
@@ -104,12 +104,12 @@ const InterviewTracker = ({ members = [] }) => {
 
       {/* Active Interviews by Department */}
       {activeInterviewees.length === 0 ? (
-        <Box textAlign="center" py={16} bg="dark.800" borderWidth="1px" borderColor="dark.border" borderRadius="xl">
-          <Box as={FaChartBar} boxSize={12} color="whiteAlpha.300" mx="auto" mb={3} />
-          <Text fontSize="md" fontWeight="medium" color="whiteAlpha.700">
+        <Box textAlign="center" py={16} bg="white" borderWidth="1px" borderColor="gray.200" borderRadius="xl">
+          <Box as={FaChartBar} boxSize={12} color="gray.200" mx="auto" mb={3} />
+          <Text fontSize="md" fontWeight="medium" color="gray.600">
             Hiện tại không có lượt phỏng vấn nào đang diễn ra
           </Text>
-          <Text fontSize="xs" color="whiteAlpha.400" mt={1}>
+          <Text fontSize="xs" color="gray.300" mt={1}>
             Khi admin bấm &ldquo;Gọi PV&rdquo; từ tab Quản lý ứng viên, danh sách sẽ hiển thị tự động tại đây
           </Text>
         </Box>
@@ -120,22 +120,22 @@ const InterviewTracker = ({ members = [] }) => {
               key={dept}
               p={5}
               borderRadius="xl"
-              bg="dark.800"
+              bg="white"
               borderWidth="1px"
-              borderColor="dark.border"
+              borderColor="gray.200"
               display="flex"
               flexDirection="column"
             >
               <Flex justify="space-between" align="center" mb={4}>
-                <Heading fontSize="sm" fontWeight="bold" color="white" textTransform="uppercase" letterSpacing="0.05em">
+                <Heading fontSize="sm" fontWeight="bold" color="gray.900" textTransform="uppercase" letterSpacing="0.05em">
                   {dept}
                 </Heading>
-                <Badge bg="dark.700" color="whiteAlpha.800" fontSize="11px" px={2} py={0.5} borderRadius="full">
+                <Badge bg="gray.100" color="gray.600" fontSize="11px" px={2} py={0.5} borderRadius="full">
                   {candidates.length} người
                 </Badge>
               </Flex>
 
-              <Divider borderColor="dark.border" mb={4} />
+              <Divider borderColor="gray.200" mb={4} />
 
               <VStack spacing={3} align="stretch" flex="1">
                 {candidates.map((candidate) => {
@@ -146,9 +146,9 @@ const InterviewTracker = ({ members = [] }) => {
                       key={candidate.id}
                       p={3.5}
                       borderRadius="lg"
-                      bg={isInInterview ? 'rgba(114, 46, 209, 0.08)' : 'dark.750'}
+                      bg={isInInterview ? 'rgba(114, 46, 209, 0.06)' : 'gray.50'}
                       border="1px solid"
-                      borderColor={isInInterview ? 'rgba(114, 46, 209, 0.3)' : 'dark.border'}
+                      borderColor={isInInterview ? 'rgba(114, 46, 209, 0.3)' : 'gray.200'}
                       position="relative"
                       overflow="hidden"
                     >
@@ -165,22 +165,22 @@ const InterviewTracker = ({ members = [] }) => {
 
                       <Flex justify="space-between" align="flex-start">
                         <Box pl={isInInterview ? 1.5 : 0}>
-                          <Text fontWeight="bold" color="white" fontSize="sm">
+                          <Text fontWeight="bold" color="gray.900" fontSize="sm">
                             {candidate.name}
                           </Text>
-                          <Text fontSize="xs" color="primary.500" fontFamily="mono">
+                          <Text fontSize="xs" color="primary.600" fontFamily="mono">
                             {candidate.MSSV}
                           </Text>
                           {candidate.major_class && (
-                            <Text fontSize="11px" color="whiteAlpha.500" mt={0.5}>
+                            <Text fontSize="11px" color="gray.400" mt={0.5}>
                               {candidate.major_class}
                             </Text>
                           )}
                         </Box>
 
                         <Badge
-                          bg={isInInterview ? 'rgba(114, 46, 209, 0.2)' : 'rgba(250, 173, 20, 0.2)'}
-                          color={isInInterview ? 'secondary.500' : 'warning.500'}
+                          bg={isInInterview ? 'rgba(114, 46, 209, 0.15)' : 'rgba(250, 173, 20, 0.15)'}
+                          color={isInInterview ? 'secondary.600' : 'warning.700'}
                           border="1px solid"
                           borderColor={isInInterview ? 'rgba(114, 46, 209, 0.4)' : 'rgba(250, 173, 20, 0.4)'}
                           fontSize="xs"

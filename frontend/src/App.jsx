@@ -262,7 +262,7 @@ function App() {
   const currentTabInfo = TAB_TITLES[activeTab] || TAB_TITLES[0];
 
   return (
-    <Flex h="100vh" bg="dark.900" overflow="hidden">
+    <Flex h="100vh" bg="gray.50" overflow="hidden">
       {/* Desktop Sidebar (No Topbar) */}
       {isDesktop ? (
         <Sidebar
@@ -309,9 +309,10 @@ function App() {
         <Flex
           h="60px"
           px={{ base: 4, md: 6 }}
-          bg="dark.850"
+          bg="whiteAlpha.800"
+          backdropFilter="blur(8px)"
           borderBottom="1px"
-          borderColor="dark.border"
+          borderColor="gray.200"
           align="center"
           justify="space-between"
           flexShrink={0}
@@ -325,14 +326,14 @@ function App() {
                 onClick={onMobileMenuOpen}
                 size="sm"
                 variant="ghost"
-                color="white"
+                color="gray.700"
               />
             )}
             <Box>
-              <Text fontSize="sm" fontWeight="bold" color="white" lineHeight="shorter">
+              <Text fontSize="sm" fontWeight="bold" color="gray.900" lineHeight="shorter">
                 {currentTabInfo.title}
               </Text>
-              <Text fontSize="11px" color="whiteAlpha.500" display={{ base: 'none', sm: 'block' }}>
+              <Text fontSize="11px" color="gray.400" display={{ base: 'none', sm: 'block' }}>
                 {currentTabInfo.subtitle}
               </Text>
             </Box>
@@ -352,9 +353,9 @@ function App() {
                 px={2.5}
                 py={1}
                 borderRadius="full"
-                bg="dark.900"
+                bg="gray.50"
                 border="1px solid"
-                borderColor="dark.border"
+                borderColor="gray.200"
               >
                 <Box
                   w="7px"
@@ -399,8 +400,8 @@ function App() {
                 icon={<RepeatIcon />}
                 size="xs"
                 variant="ghost"
-                color="whiteAlpha.700"
-                _hover={{ color: 'white', bg: 'dark.750' }}
+                color="gray.500"
+                _hover={{ color: 'gray.900', bg: 'gray.100' }}
                 onClick={() => fetchMembers(true)}
                 isLoading={isRefreshing}
               />
