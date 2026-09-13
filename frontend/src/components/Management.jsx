@@ -62,11 +62,14 @@ import {
   FaEye,
   FaLayerGroup,
   FaLock,
+  FaFileExcel,
+  FaFileCsv,
 } from 'react-icons/fa';
 import api from '../api/axios';
 import CandidateDetailModal from './CandidateDetailModal';
 import {
   DEPARTMENT_LABELS,
+  TRACK_LABELS,
   SUB_DEPARTMENT_STATES,
   SUB_DEPARTMENT_STATE_PROPS,
   SUB_SCREENING_STATES,
@@ -322,6 +325,116 @@ const Management = ({ members, setMembers }) => {
     }
   };
 
+  const handleExportCSV = (candidateList = members, type = 'all') => {
+    if (!candidateList || candidateList.length === 0) {
+      toast({ title: 'Không có dữ liệu ứng viên để xuất', status: 'warning', duration: 2500, isClosable: true });
+      return;
+    }
+
+    const headers = [
+      'STT',
+      'MSSV / Mã định danh',
+      'Họ và tên',
+      'Số điện thoại',
+      'Email',
+      'Khối ứng tuyển',
+      'Lớp / Chuyên ngành',
+      'Loại sinh viên',
+      'Trường đang theo học',
+      'Mảng chuyên môn chính',
+      'Trạng thái mảng chính',
+      'Mảng chuyên môn phụ',
+      'Trạng thái từng mảng phụ',
+      'Thời gian Check-in',
+      'Trạng thái xác nhận',
+      'Thời gian xác nhận',
+      'Link xác nhận cá nhân',
+      'Mã xác nhận (6 số)',
+      'Yêu cầu đổi lịch phỏng vấn',
+      'Hồ sơ CV',
+      'Ghi chú',
+    ];
+
+    const escapeCell = (val) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val);
+      return `"${str.replace(/"/g, '""')}"`;
+    };
+
+    const rows = candidateList.map((m, idx) => {
+      const mainDept = DEPARTMENT_LABELS[m.specialist] || m.specialist || 'Chung';
+      const subDepts = parseSubDepartments(m.sub_departments);
+      const subDeptsText = subDepts.map((s) => DEPARTMENT_LABELS[s] || s).join(', ');
+
+      const subStates = parseSubDepartmentStates(m.sub_department_states);
+      const subStatesText = subDepts.length > 0
+        ? subDepts.map((s) => `${DEPARTMENT_LABELS[s] || s}: ${subStates[s] || 'Chờ duyệt'}`).join(' | ')
+        : 'Không có';
+
+      const trackText = TRACK_LABELS[m.application_track] || (m.application_track === 'media' ? 'Truyền thông' : 'Kỹ thuật');
+      const studentTypeText = m.student_type === 'hust' ? 'ĐHBK Hà Nội (HUST)' : m.student_type === 'external' ? 'Trường ngoài' : (m.student_type || '');
+      const schoolText = m.school || (m.student_type === 'hust' ? 'Đại học Bách khoa Hà Nội' : '');
+
+      let confirmStatus = 'Chưa cấp link';
+      if (m.confirmed_at) {
+        confirmStatus = 'Đã xác nhận tham gia';
+      } else if (m.confirm_token) {
+        confirmStatus = 'Chờ ứng viên xác nhận';
+      }
+
+      const confirmUrl = m.confirm_url || (m.confirm_token ? `${window.location.origin}/confirm/${m.confirm_token}` : '');
+
+      return [
+        idx + 1,
+        m.MSSV || '',
+        m.name || '',
+        m.phone || '',
+        m.email || '',
+        trackText,
+        m.major_class || '',
+        studentTypeText,
+        schoolText,
+        mainDept,
+        m.state || '',
+        subDeptsText || 'Không có',
+        subStatesText,
+        m.checkin_time || 'Chưa check-in',
+        confirmStatus,
+        m.confirmed_at || '',
+        confirmUrl,
+        m.confirm_password || '',
+        m.reschedule_request || '',
+        m.linkCV || '',
+        m.note || '',
+      ].map(escapeCell).join(',');
+    });
+
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+    const filename = type === 'dang_loc'
+      ? `danh_sach_ung_vien_loc_${dateStr}.csv`
+      : `danh_sach_toan_bo_ung_vien_bk_auto_${dateStr}.csv`;
+
+    const csvContent = '\uFEFF' + [headers.map(escapeCell).join(','), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: 'Đã xuất file CSV thành công',
+      description: `Đã tải về ${candidateList.length} ứng viên với đầy đủ thông tin vào ${filename}`,
+      status: 'success',
+      duration: 3500,
+      isClosable: true,
+    });
+  };
+
   const openCV = (member) => {
     openCandidateCV(member?.linkCV, toast);
   };
@@ -532,14 +645,61 @@ const Management = ({ members, setMembers }) => {
             </Select>
           </HStack>
 
-          <Button
-            size="sm"
-            colorScheme="primary"
-            leftIcon={<AddIcon />}
-            onClick={() => openEditModal()}
-          >
-            Thêm ứng viên
-          </Button>
+          <HStack spacing={2.5}>
+            {/* Export CSV Button with Menu for All vs Filtered */}
+            <Menu size="sm">
+              <HStack spacing={0}>
+                <Button
+                  size="sm"
+                  colorScheme="green"
+                  variant="outline"
+                  leftIcon={<FaFileExcel />}
+                  onClick={() => handleExportCSV(members, 'toan_bo')}
+                  borderRightRadius={filteredMembers.length !== members.length ? 0 : 'md'}
+                  title="Bấm để tải về toàn bộ danh sách ứng viên (file CSV)"
+                >
+                  Xuất toàn bộ CSV ({members.length})
+                </Button>
+                {filteredMembers.length !== members.length && (
+                  <MenuButton
+                    as={IconButton}
+                    size="sm"
+                    colorScheme="green"
+                    variant="outline"
+                    icon={<ChevronDownIcon />}
+                    borderLeftRadius={0}
+                    borderLeft="none"
+                    title="Tùy chọn xuất file"
+                    aria-label="Tùy chọn xuất file"
+                  />
+                )}
+              </HStack>
+              <MenuList fontSize="xs" zIndex={10}>
+                <MenuItem
+                  icon={<FaFileExcel />}
+                  onClick={() => handleExportCSV(members, 'toan_bo')}
+                  fontWeight="semibold"
+                >
+                  Xuất toàn bộ ứng viên ({members.length} người)
+                </MenuItem>
+                <MenuItem
+                  icon={<FaFileCsv />}
+                  onClick={() => handleExportCSV(filteredMembers, 'dang_loc')}
+                >
+                  Xuất danh sách đang lọc ({filteredMembers.length} người)
+                </MenuItem>
+              </MenuList>
+            </Menu>
+
+            <Button
+              size="sm"
+              colorScheme="primary"
+              leftIcon={<AddIcon />}
+              onClick={() => openEditModal()}
+            >
+              Thêm ứng viên
+            </Button>
+          </HStack>
         </Flex>
       </Box>
 

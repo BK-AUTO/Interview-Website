@@ -5,6 +5,8 @@ import uuid
 import json
 import queue
 import threading
+import csv
+import io
 from dotenv import load_dotenv
 load_dotenv()
 from flask import Flask, jsonify, request, redirect, send_from_directory, Response
@@ -249,6 +251,7 @@ class Member(db.Model):
     is_deleted = db.Column(db.Boolean, default=False, nullable=False, index=True)
     # Interview participation confirmation portal (/confirm/<token>).
     confirm_token = db.Column(db.String(64), unique=True, nullable=True)
+    confirm_password = db.Column(db.String(20), nullable=True)
     confirm_password_hash = db.Column(db.String(200), nullable=True)
     reschedule_request = db.Column(db.String(500), nullable=True)
     confirmed_at = db.Column(db.String(100), nullable=True)
@@ -272,9 +275,9 @@ def member_to_dict(member):
         'state': member.state,
         'note': member.note,
         # Safe to expose: every endpoint that serializes a Member this way is
-        # @jwt_required() (admin-only). The token alone is useless without the
-        # password, which is never returned here (only its hash is stored).
+        # @jwt_required() (admin-only).
         'confirm_token': member.confirm_token,
+        'confirm_password': member.confirm_password,
         'confirm_url': f"{FRONTEND_URL}/confirm/{member.confirm_token}" if member.confirm_token else None,
         'reschedule_request': member.reschedule_request,
         'confirmed_at': member.confirmed_at,
@@ -473,6 +476,108 @@ def get_members():
         logging.error(f"Error getting members: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/members/export-csv', methods=['GET'])
+@jwt_required()
+def export_members_csv():
+    try:
+        members = Member.query.filter_by(is_deleted=False).order_by(Member.id.asc()).all()
+        output = io.StringIO()
+        # UTF-8 BOM for Microsoft Excel compatibility
+        output.write('\ufeff')
+        writer = csv.writer(output)
+
+        headers = [
+            'STT',
+            'MSSV / Mã định danh',
+            'Họ và tên',
+            'Số điện thoại',
+            'Email',
+            'Khối ứng tuyển',
+            'Lớp / Chuyên ngành',
+            'Loại sinh viên',
+            'Trường đang theo học',
+            'Mảng chuyên môn chính',
+            'Trạng thái mảng chính',
+            'Mảng chuyên môn phụ',
+            'Trạng thái từng mảng phụ',
+            'Thời gian Check-in',
+            'Trạng thái xác nhận',
+            'Thời gian xác nhận',
+            'Link xác nhận cá nhân',
+            'Mã xác nhận (6 số)',
+            'Yêu cầu đổi lịch PV',
+            'Link CV / Hồ sơ',
+            'Ghi chú'
+        ]
+        writer.writerow(headers)
+
+        for idx, m in enumerate(members, start=1):
+            main_dept = DEPARTMENT_LABELS.get(m.specialist, m.specialist or 'Chung')
+
+            sub_list = []
+            if m.sub_departments:
+                try:
+                    parsed_subs = json.loads(m.sub_departments) if isinstance(m.sub_departments, str) else m.sub_departments
+                    if isinstance(parsed_subs, list):
+                        sub_list = parsed_subs
+                except Exception:
+                    pass
+            sub_depts_text = ', '.join([DEPARTMENT_LABELS.get(s, s) for s in sub_list]) if sub_list else 'Không có'
+
+            sub_states_dict = {}
+            if m.sub_department_states:
+                try:
+                    parsed_states = json.loads(m.sub_department_states) if isinstance(m.sub_department_states, str) else m.sub_department_states
+                    if isinstance(parsed_states, dict):
+                        sub_states_dict = parsed_states
+                except Exception:
+                    pass
+            sub_states_text = ' | '.join([f"{DEPARTMENT_LABELS.get(s, s)}: {sub_states_dict.get(s, 'Chờ duyệt')}" for s in sub_list]) if sub_list else 'Không có'
+
+            track_label = TRACK_LABELS.get(m.application_track, 'Truyền thông' if m.application_track == 'media' else 'Kỹ thuật')
+            student_type_label = 'ĐHBK Hà Nội (HUST)' if m.student_type == 'hust' else 'Trường ngoài' if m.student_type == 'external' else (m.student_type or '')
+            school_label = m.school or ('ĐHBK Hà Nội' if m.student_type == 'hust' else '')
+
+            confirm_status = 'Đã xác nhận tham gia' if m.confirmed_at else ('Chờ ứng viên xác nhận' if m.confirm_token else 'Chưa cấp link')
+            confirm_url = f"{FRONTEND_URL}/confirm/{m.confirm_token}" if m.confirm_token else ''
+
+            writer.writerow([
+                idx,
+                m.MSSV or '',
+                m.name or '',
+                m.phone or '',
+                m.email or '',
+                track_label,
+                m.major_class or '',
+                student_type_label,
+                school_label,
+                main_dept,
+                m.state or '',
+                sub_depts_text,
+                sub_states_text,
+                m.checkin_time or 'Chưa check-in',
+                confirm_status,
+                m.confirmed_at or '',
+                confirm_url,
+                m.confirm_password or '',
+                m.reschedule_request or '',
+                m.linkCV or '',
+                m.note or ''
+            ])
+
+        csv_bytes = output.getvalue().encode('utf-8-sig')
+        current_time_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"danh_sach_ung_vien_bk_auto_{current_time_str}.csv"
+
+        return Response(
+            csv_bytes,
+            mimetype="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        logging.error(f"Error exporting members CSV: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/members', methods=['POST'])
 @jwt_required()
 def add_member():
@@ -481,6 +586,7 @@ def add_member():
         sub_deps_raw = data.get('sub_departments')
         sub_deps_str = json.dumps(sub_deps_raw) if isinstance(sub_deps_raw, list) else sub_deps_raw
 
+        raw_confirm_pwd = generate_confirm_password()
         new_member = Member(
             name=data['name'],
             MSSV=data['MSSV'],
@@ -495,7 +601,10 @@ def add_member():
             # Members added manually by an admin are assumed already vetted,
             # so they default to 'Đậu vòng đơn' if not specified.
             state=data.get('state', 'Đậu vòng đơn'),
-            note=data.get('note')
+            note=data.get('note'),
+            confirm_token=secrets.token_urlsafe(24),
+            confirm_password=raw_confirm_pwd,
+            confirm_password_hash=generate_password_hash(raw_confirm_pwd)
         )
         db.session.add(new_member)
         db.session.commit()
@@ -628,9 +737,11 @@ def edit_member(id):
             # token/password rather than silently invalidating a link the
             # admin may have already sent — use reset-confirmation for that.
             new_plaintext_password = None
-            if member.state == 'Đậu vòng đơn' and not member.confirm_token:
-                member.confirm_token = secrets.token_urlsafe(24)
+            if (member.state == 'Đậu vòng đơn' and not member.confirm_token) or (not member.confirm_password):
                 new_plaintext_password = generate_confirm_password()
+                if not member.confirm_token:
+                    member.confirm_token = secrets.token_urlsafe(24)
+                member.confirm_password = new_plaintext_password
                 member.confirm_password_hash = generate_password_hash(new_plaintext_password)
 
             db.session.commit()
@@ -735,6 +846,7 @@ def reset_confirmation(id):
 
         member.confirm_token = secrets.token_urlsafe(24)
         new_plaintext_password = generate_confirm_password()
+        member.confirm_password = new_plaintext_password
         member.confirm_password_hash = generate_password_hash(new_plaintext_password)
         db.session.commit()
 
@@ -1070,7 +1182,14 @@ def get_cv_file(filename):
 # than issuing its own session token, to avoid a second auth/expiry system.
 
 def check_confirm_password(member, password):
-    return bool(member.confirm_password_hash) and check_password_hash(member.confirm_password_hash, password or '')
+    if not password:
+        return False
+    entered = str(password).strip()
+    if member.confirm_password:
+        return member.confirm_password.strip() == entered
+    if member.confirm_password_hash:
+        return check_password_hash(member.confirm_password_hash, entered)
+    return False
 
 def confirm_summary(member):
     return {
@@ -1199,6 +1318,28 @@ def ensure_schema():
                 conn.commit()
         except Exception:
             pass
+        try:
+            with db.engine.connect() as conn:
+                conn.execute(db.text("ALTER TABLE member ADD COLUMN confirm_password VARCHAR(20)"))
+                conn.commit()
+        except Exception:
+            pass
+
+        # Auto-migrate existing members without confirm_password: generate new token and raw password
+        try:
+            members_to_update = Member.query.filter(
+                (Member.confirm_password == None) | (Member.confirm_password == '')
+            ).all()
+            if members_to_update:
+                for m in members_to_update:
+                    m.confirm_token = secrets.token_urlsafe(24)
+                    m.confirm_password = generate_confirm_password()
+                    m.confirm_password_hash = generate_password_hash(m.confirm_password)
+                db.session.commit()
+                logging.info(f"Auto-migrated {len(members_to_update)} existing members with new token & raw password")
+        except Exception as e:
+            logging.error(f"Error auto-migrating confirm passwords: {e}")
+            db.session.rollback()
 
 ensure_schema()
 
