@@ -35,6 +35,7 @@ import {
 } from 'react-icons/fa';
 import QrScanner from 'qr-scanner';
 import api from '../api/axios';
+import { DEPARTMENT_LABELS } from '../config';
 
 const CheckinQr = ({ isOpen, onClose, setMembers }) => {
   const [uid, setUid] = useState('');
@@ -269,7 +270,7 @@ const CheckinQr = ({ isOpen, onClose, setMembers }) => {
 
         toast({
           title: 'Check-in thành công!',
-          description: `Ứng viên ${name} (${specialist || 'Chưa phân mảng'}) đã check-in lúc ${displayTime}`,
+          description: `Ứng viên ${name} (${DEPARTMENT_LABELS[specialist] || specialist || 'Chưa phân mảng'}) đã check-in lúc ${displayTime}`,
           status: 'success',
           duration: 5000,
           isClosable: true,

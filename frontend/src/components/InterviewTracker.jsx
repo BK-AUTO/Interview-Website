@@ -11,6 +11,7 @@ import {
   Divider,
 } from '@chakra-ui/react';
 import { FaChartBar, FaBullhorn, FaMicrophoneAlt } from 'react-icons/fa';
+import { DEPARTMENT_LABELS } from '../config';
 
 const InterviewTracker = ({ members = [] }) => {
   // Extract members in active interview flow ('Đang phỏng vấn' or 'Gọi PV')
@@ -34,7 +35,7 @@ const InterviewTracker = ({ members = [] }) => {
   const groupedBySpecialist = useMemo(() => {
     const map = {};
     activeInterviewees.forEach((member) => {
-      const spec = member.specialist || 'Chung / Chưa phân mảng';
+      const spec = DEPARTMENT_LABELS[member.specialist] || member.specialist || 'Chung / Chưa phân mảng';
       if (!map[spec]) map[spec] = [];
       map[spec].push(member);
     });

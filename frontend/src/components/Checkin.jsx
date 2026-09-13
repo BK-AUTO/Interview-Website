@@ -19,6 +19,7 @@ import {
 } from '@chakra-ui/react';
 import { FaCheckCircle } from 'react-icons/fa';
 import api from '../api/axios';
+import { DEPARTMENT_LABELS } from '../config';
 
 const Checkin = ({ isOpen, onClose, setMembers }) => {
   const [uid, setUid] = useState('');
@@ -53,7 +54,7 @@ const Checkin = ({ isOpen, onClose, setMembers }) => {
 
         toast({
           title: "Check-in thành công!",
-          description: `Ứng viên ${name} (${specialist || 'Chưa phân mảng'}) đã check-in lúc ${displayTime}`,
+          description: `Ứng viên ${name} (${DEPARTMENT_LABELS[specialist] || specialist || 'Chưa phân mảng'}) đã check-in lúc ${displayTime}`,
           status: "success",
           duration: 5000,
           isClosable: true,

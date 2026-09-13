@@ -29,7 +29,7 @@ import AuditLogHistory from './components/AuditLogHistory';
 import Checkin from './components/Checkin';
 import CheckinQr from './components/CheckinQr';
 import api from './api/axios';
-import { BASE_URL } from './config';
+import { BASE_URL, DEPARTMENT_LABELS } from './config';
 
 const TAB_TITLES = [
   { title: 'Duyệt hồ sơ vòng đơn', subtitle: 'Sàng lọc hồ sơ ứng viên đăng ký tuyển thành viên' },
@@ -239,7 +239,7 @@ function App() {
             window.dispatchEvent(new CustomEvent('app:data-updated'));
             toast({
               title: 'Phỏng vấn bắt đầu',
-              description: `${interviewMember.name} (${interviewMember.specialist}) đang phỏng vấn`,
+              description: `${interviewMember.name} (${DEPARTMENT_LABELS[interviewMember.specialist] || interviewMember.specialist}) đang phỏng vấn`,
               status: 'warning',
               duration: 3000,
               isClosable: true,

@@ -31,7 +31,7 @@ import {
   FaUserGraduate,
   FaArrowLeft,
 } from 'react-icons/fa';
-import { BASE_URL } from '../config';
+import { BASE_URL, DEPARTMENT_LABELS } from '../config';
 
 // Standalone axios instance for public candidate confirmation
 const api = axios.create({ baseURL: BASE_URL });
@@ -339,7 +339,7 @@ const ConfirmParticipation = () => {
               fontSize="xs"
               fontWeight="semibold"
             >
-              Mảng: {specialist || 'Chung'}
+              Mảng: {DEPARTMENT_LABELS[specialist] || specialist || 'Chung'}
             </Badge>
             <Badge
               colorScheme={
