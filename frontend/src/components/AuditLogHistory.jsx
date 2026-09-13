@@ -52,20 +52,22 @@ const AuditLogHistory = () => {
   const fetchLogs = useCallback(async (showToast = false) => {
     setLoading(true);
     try {
-      const res = await api.get('/api/audit-logs', { params: { limit: 2000 } });
+      const res = await api.get('/api/audit-logs', { params: { limit: 500 } });
       setLogs(res.data || []);
       if (showToast) {
         toast({ title: 'Đã tải lại lịch sử thao tác', status: 'success', duration: 2000, isClosable: true });
       }
     } catch (err) {
       console.error('Error fetching audit logs:', err);
-      toast({
-        title: 'Không thể tải lịch sử thao tác',
-        description: err.response?.data?.error || err.message,
-        status: 'error',
-        duration: 4000,
-        isClosable: true,
-      });
+      if (showToast) {
+        toast({
+          title: 'Không thể tải lịch sử thao tác',
+          description: err.response?.data?.error || err.message,
+          status: 'error',
+          duration: 4000,
+          isClosable: true,
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -73,6 +75,14 @@ const AuditLogHistory = () => {
 
   useEffect(() => {
     fetchLogs();
+
+    // Automatically sync audit logs when realtime updates happen on other tabs
+    const handleDataUpdated = () => {
+      fetchLogs();
+    };
+
+    window.addEventListener('app:data-updated', handleDataUpdated);
+    return () => window.removeEventListener('app:data-updated', handleDataUpdated);
   }, [fetchLogs]);
 
   const adminCount = useMemo(() => logs.filter((l) => l.actor_type === 'admin').length, [logs]);

@@ -35,6 +35,7 @@ import {
 } from 'react-icons/fa';
 import api from '../api/axios';
 import { DEPARTMENT_LABELS, TRACK_LABELS, ACTION_ICONS, ACTION_COLORS } from '../config';
+import { openCandidateCV } from '../utils/cvCache';
 
 const STATE_BADGE_PROPS = {
   'Chờ duyệt': { bg: 'gray.100', color: 'gray.600', borderColor: 'gray.200' },
@@ -49,16 +50,22 @@ const STATE_BADGE_PROPS = {
   'Đã phỏng vấn': { bg: 'rgba(58, 197, 105, 0.12)', color: 'primary.600', borderColor: 'rgba(58, 197, 105, 0.3)' },
 };
 
-const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
+const CandidateDetailModal = ({ isOpen, onClose, candidate, members }) => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const toast = useToast();
 
+  // Sync candidate data with live members state when updates arrive
+  const liveCandidate = useMemo(() => {
+    if (!candidate?.id) return candidate;
+    return members?.find((m) => m.id === candidate.id) || candidate;
+  }, [members, candidate]);
+
   const fetchLogs = useCallback(async () => {
-    if (!candidate?.id) return;
+    if (!liveCandidate?.id) return;
     setLoading(true);
     try {
-      const res = await api.get(`/api/members/${candidate.id}/audit-logs`);
+      const res = await api.get(`/api/members/${liveCandidate.id}/audit-logs`);
       setLogs(res.data || []);
     } catch (err) {
       console.error('Error fetching audit logs:', err);
@@ -71,19 +78,19 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
     } finally {
       setLoading(false);
     }
-  }, [candidate?.id, toast]);
+  }, [liveCandidate?.id, toast]);
 
   useEffect(() => {
-    if (isOpen && candidate?.id) {
+    if (isOpen && liveCandidate?.id) {
       fetchLogs();
     } else {
       setLogs([]);
     }
-  }, [isOpen, candidate?.id, fetchLogs]);
+  }, [isOpen, liveCandidate?.id, fetchLogs]);
 
-  if (!candidate) return null;
+  if (!liveCandidate) return null;
 
-  const stateProps = STATE_BADGE_PROPS[candidate.state] || {
+  const stateProps = STATE_BADGE_PROPS[liveCandidate.state] || {
     bg: 'gray.100',
     color: 'gray.600',
     borderColor: 'gray.200',
@@ -91,10 +98,10 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
 
   const parseSubDepts = () => {
     try {
-      if (!candidate.sub_departments) return [];
-      const parsed = typeof candidate.sub_departments === 'string'
-        ? JSON.parse(candidate.sub_departments)
-        : candidate.sub_departments;
+      if (!liveCandidate.sub_departments) return [];
+      const parsed = typeof liveCandidate.sub_departments === 'string'
+        ? JSON.parse(liveCandidate.sub_departments)
+        : liveCandidate.sub_departments;
       return Array.isArray(parsed) ? parsed : [];
     } catch {
       return [];
@@ -245,28 +252,26 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate }) => {
                   <FaFilePdf />
                   <Text>Hồ sơ CV</Text>
                 </HStack>
-                {candidate.linkCV ? (
-                  <Link
-                    href={candidate.linkCV.startsWith('http') ? candidate.linkCV : candidate.linkCV}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    color="primary.600"
-                    fontSize="sm"
+                {liveCandidate.linkCV ? (
+                  <Button
+                    size="xs"
+                    variant="link"
+                    colorScheme="primary"
                     fontWeight="medium"
                     display="inline-flex"
                     alignItems="center"
                     gap={1.5}
-                    _hover={{ textDecoration: 'underline', color: 'primary.700' }}
+                    onClick={() => openCandidateCV(liveCandidate.linkCV, toast)}
                   >
                     Xem file CV <FaExternalLinkAlt size={10} />
-                  </Link>
+                  </Button>
                 ) : (
                   <Text fontSize="sm" color="gray.400">Không có CV</Text>
                 )}
               </Box>
             </SimpleGrid>
 
-            {candidate.reschedule_request && (
+            {liveCandidate.reschedule_request && (
               <Box mt={3} p={3} borderRadius="lg" bg="rgba(250, 173, 20, 0.08)" borderWidth="1px" borderColor="rgba(250, 173, 20, 0.25)">
                 <Text fontSize="xs" fontWeight="bold" color="warning.700" mb={1}>
                   ⚠️ Lý do xin đổi lịch:

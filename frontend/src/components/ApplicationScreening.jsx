@@ -34,6 +34,7 @@ import api from '../api/axios';
 import ConfirmCredentialsModal from './ConfirmCredentialsModal';
 import CandidateDetailModal from './CandidateDetailModal';
 import { DEPARTMENT_LABELS, TRACK_LABELS } from '../config';
+import { openCandidateCV } from '../utils/cvCache';
 
 const ApplicationScreening = ({ members, setMembers }) => {
   const toast = useToast();
@@ -111,20 +112,8 @@ const ApplicationScreening = ({ members, setMembers }) => {
     }
   };
 
-  const openCV = async (member) => {
-    if (!member.linkCV) return;
-    if (!member.linkCV.startsWith('/api/uploads/')) {
-      window.open(member.linkCV, '_blank', 'noopener,noreferrer');
-      return;
-    }
-    try {
-      const response = await api.get(member.linkCV, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(response.data);
-      window.open(url, '_blank');
-    } catch (error) {
-      console.error('Error fetching CV:', error);
-      toast({ title: 'Không tải được file CV', status: 'error', duration: 3000, isClosable: true });
-    }
+  const openCV = (member) => {
+    openCandidateCV(member?.linkCV, toast);
   };
 
   const parseSubDepartments = (raw) => {
@@ -433,6 +422,7 @@ const ApplicationScreening = ({ members, setMembers }) => {
           isOpen={!!selectedCandidate}
           onClose={() => setSelectedCandidate(null)}
           candidate={selectedCandidate}
+          members={members}
         />
       )}
     </Box>

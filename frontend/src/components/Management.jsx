@@ -57,6 +57,7 @@ import {
 import api from '../api/axios';
 import CandidateDetailModal from './CandidateDetailModal';
 import { DEPARTMENT_LABELS } from '../config';
+import { openCandidateCV } from '../utils/cvCache';
 
 const STATE_BADGE_PROPS = {
   'Chờ duyệt': { bg: 'gray.100', color: 'gray.600', borderColor: 'gray.200' },
@@ -203,20 +204,8 @@ const Management = ({ members, setMembers }) => {
     }
   };
 
-  const openCV = async (member) => {
-    if (!member.linkCV) return;
-    if (!member.linkCV.startsWith('/api/uploads/')) {
-      window.open(member.linkCV, '_blank', 'noopener,noreferrer');
-      return;
-    }
-    try {
-      const response = await api.get(member.linkCV, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(response.data);
-      window.open(url, '_blank');
-    } catch (error) {
-      console.error('Error fetching CV:', error);
-      toast({ title: 'Không tải được CV', status: 'error', duration: 3000, isClosable: true });
-    }
+  const openCV = (member) => {
+    openCandidateCV(member?.linkCV, toast);
   };
 
   // State pipeline advance: 'Đã checkin' -> 'Gọi PV' -> 'Đang phỏng vấn' -> 'Đã phỏng vấn'
@@ -708,6 +697,7 @@ const Management = ({ members, setMembers }) => {
           isOpen={!!detailCandidate}
           onClose={() => setDetailCandidate(null)}
           candidate={detailCandidate}
+          members={members}
         />
       )}
     </Box>

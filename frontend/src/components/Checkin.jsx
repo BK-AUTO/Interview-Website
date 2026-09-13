@@ -20,7 +20,7 @@ import {
 import { FaCheckCircle } from 'react-icons/fa';
 import api from '../api/axios';
 
-const Checkin = ({ isOpen, onClose }) => {
+const Checkin = ({ isOpen, onClose, setMembers }) => {
   const [uid, setUid] = useState('');
   const [loading, setLoading] = useState(false);
   const toast = useToast();
@@ -42,8 +42,14 @@ const Checkin = ({ isOpen, onClose }) => {
       const response = await api.post('/api/checkin', { uid: uid.trim() });
 
       if (response.data && response.data.member) {
-        const { name, specialist, checkin_time } = response.data.member;
+        const checkedMember = response.data.member;
+        const { name, specialist, checkin_time } = checkedMember;
         const displayTime = checkin_time || 'N/A';
+
+        // Immediately sync local state
+        if (setMembers) {
+          setMembers((prev) => prev.map((m) => (m.id === checkedMember.id ? checkedMember : m)));
+        }
 
         toast({
           title: "Check-in thành công!",

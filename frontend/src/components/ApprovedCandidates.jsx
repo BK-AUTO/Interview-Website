@@ -396,6 +396,7 @@ const ApprovedCandidates = ({ members, setMembers }) => {
           isOpen={!!selectedCandidate}
           onClose={() => setSelectedCandidate(null)}
           candidate={selectedCandidate}
+          members={members}
         />
       )}
     </Box>
