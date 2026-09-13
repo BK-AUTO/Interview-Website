@@ -176,4 +176,63 @@ export function getSubDeptAllowedStates(mainState, currentSubState = 'Chờ duy�
   return SUB_SCREENING_STATES;
 }
 
+/**
+ * Checks whether a candidate is currently in active interview (either main or sub-department).
+ */
+export function isMemberInActiveInterview(member) {
+  if (!member) return false;
+  if (member.state === 'Đang phỏng vấn' || member.state === 'Gọi PV') {
+    return true;
+  }
+  const subStates = parseSubDepartmentStates(member.sub_department_states);
+  return Object.values(subStates).some(
+    (st) => st === 'Đang phỏng vấn' || st === 'Gọi PV'
+  );
+}
+
+/**
+ * Extracts all active interview sessions (main and sub-departments) for a candidate.
+ */
+export function getMemberActiveInterviewSessions(member) {
+  if (!member) return [];
+  const sessions = [];
+
+  // 1. Main department session
+  if (member.state === 'Đang phỏng vấn' || member.state === 'Gọi PV') {
+    sessions.push({
+      uniqueKey: `${member.id}-main`,
+      member,
+      candidateName: member.name,
+      candidateMSSV: member.MSSV,
+      major_class: member.major_class,
+      deptKey: member.specialist,
+      deptLabel: DEPARTMENT_LABELS[member.specialist] || member.specialist || 'Chung / Chưa phân mảng',
+      state: member.state,
+      isSubDept: false,
+    });
+  }
+
+  // 2. Sub-department sessions
+  const subStates = parseSubDepartmentStates(member.sub_department_states);
+  Object.entries(subStates).forEach(([subKey, subState]) => {
+    if (subState === 'Đang phỏng vấn' || subState === 'Gọi PV') {
+      sessions.push({
+        uniqueKey: `${member.id}-sub-${subKey}`,
+        member,
+        candidateName: member.name,
+        candidateMSSV: member.MSSV,
+        major_class: member.major_class,
+        deptKey: subKey,
+        deptLabel: DEPARTMENT_LABELS[subKey] || subKey,
+        state: subState,
+        isSubDept: true,
+        subDeptKey: subKey,
+      });
+    }
+  });
+
+  return sessions;
+}
+
+
 

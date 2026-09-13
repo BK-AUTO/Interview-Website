@@ -631,6 +631,8 @@ def edit_member(id):
             db.session.commit()
 
             # Record audit log based on state transition or data update
+            sub_called = False
+            sub_started = False
             if member.state != previous_state:
                 if member.state == 'Đậu vòng đơn':
                     action_name = 'Duyệt đậu vòng đơn'
@@ -658,6 +660,10 @@ def edit_member(id):
                     changes = []
                     for k, v in n_sub.items():
                         if p_sub.get(k) != v:
+                            if v == 'Gọi PV':
+                                sub_called = True
+                            elif v == 'Đang phỏng vấn':
+                                sub_started = True
                             d_name = DEPARTMENT_LABELS.get(k, k)
                             changes.append(f"{d_name}: {p_sub.get(k, 'Chưa có')} -> {v}")
                     details_text = f"Cập nhật mảng phụ: {', '.join(changes)}"
@@ -688,9 +694,9 @@ def edit_member(id):
                 announcer.announce('member_screening_passed', member_data)
             elif member.state == 'Trượt vòng đơn' and previous_state != 'Trượt vòng đơn':
                 announcer.announce('member_screening_failed', member_data)
-            elif member.state == 'Gọi PV' and previous_state != 'Gọi PV':
+            elif (member.state == 'Gọi PV' and previous_state != 'Gọi PV') or sub_called:
                 announcer.announce('member_interview_called', member_data)
-            elif member.state == 'Đang phỏng vấn' and previous_state != 'Đang phỏng vấn':
+            elif (member.state == 'Đang phỏng vấn' and previous_state != 'Đang phỏng vấn') or sub_started:
                 announcer.announce('member_interview_started', member_data)
             elif member.state == 'Đã phỏng vấn' and previous_state != 'Đã phỏng vấn':
                 announcer.announce('member_interview_ended', member_data)
@@ -700,6 +706,7 @@ def edit_member(id):
                 announcer.announce('member_reschedule_requested', member_data)
             else:
                 announcer.announce('member_edited', member_data)
+
 
             logging.info(f"Member edited: {member.name}, state changed from {previous_state} to {member.state}")
             return jsonify(response_payload)

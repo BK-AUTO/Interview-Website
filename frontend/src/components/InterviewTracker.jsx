@@ -11,36 +11,34 @@ import {
   Divider,
 } from '@chakra-ui/react';
 import { FaChartBar, FaBullhorn, FaMicrophoneAlt } from 'react-icons/fa';
-import { DEPARTMENT_LABELS } from '../config';
+import { getMemberActiveInterviewSessions } from '../config';
 
 const InterviewTracker = ({ members = [] }) => {
-  // Extract members in active interview flow ('Đang phỏng vấn' or 'Gọi PV')
-  const activeInterviewees = useMemo(() => {
-    return members.filter(
-      (m) => m.state === 'Đang phỏng vấn' || m.state === 'Gọi PV'
-    );
+  // Extract all active interview sessions (both Main Department and Sub-Departments)
+  const activeSessions = useMemo(() => {
+    return members.flatMap(getMemberActiveInterviewSessions);
   }, [members]);
 
   const inInterviewCount = useMemo(
-    () => activeInterviewees.filter((m) => m.state === 'Đang phỏng vấn').length,
-    [activeInterviewees]
+    () => activeSessions.filter((s) => s.state === 'Đang phỏng vấn').length,
+    [activeSessions]
   );
 
   const callingCount = useMemo(
-    () => activeInterviewees.filter((m) => m.state === 'Gọi PV').length,
-    [activeInterviewees]
+    () => activeSessions.filter((s) => s.state === 'Gọi PV').length,
+    [activeSessions]
   );
 
-  // Group active interviewees by specialist/department
-  const groupedBySpecialist = useMemo(() => {
+  // Group active interview sessions by department
+  const groupedByDepartment = useMemo(() => {
     const map = {};
-    activeInterviewees.forEach((member) => {
-      const spec = DEPARTMENT_LABELS[member.specialist] || member.specialist || 'Chung / Chưa phân mảng';
-      if (!map[spec]) map[spec] = [];
-      map[spec].push(member);
+    activeSessions.forEach((session) => {
+      const dept = session.deptLabel;
+      if (!map[dept]) map[dept] = [];
+      map[dept].push(session);
     });
     return map;
-  }, [activeInterviewees]);
+  }, [activeSessions]);
 
   return (
     <Box pb={8}>
@@ -55,7 +53,7 @@ const InterviewTracker = ({ members = [] }) => {
               Bảng theo dõi phỏng vấn trực tiếp
             </Heading>
             <Text fontSize="xs" color="gray.500">
-              Cập nhật thời gian thực các phòng phỏng vấn và ứng viên đang trong lượt
+              Cập nhật thời gian thực các phòng phỏng vấn mảng chính & mảng phụ
             </Text>
           </Box>
         </HStack>
@@ -77,7 +75,7 @@ const InterviewTracker = ({ members = [] }) => {
                 Đang trong phòng phỏng vấn
               </Text>
               <Text fontSize="2xl" fontWeight="bold" color="secondary.500" mt={1}>
-                {inInterviewCount} ứng viên
+                {inInterviewCount} lượt
               </Text>
             </Box>
             <Box p={3} borderRadius="xl" bg="rgba(114, 46, 209, 0.15)" color="secondary.500">
@@ -93,7 +91,7 @@ const InterviewTracker = ({ members = [] }) => {
                 Đang được gọi vào phòng
               </Text>
               <Text fontSize="2xl" fontWeight="bold" color="warning.600" mt={1}>
-                {callingCount} ứng viên
+                {callingCount} lượt
               </Text>
             </Box>
             <Box p={3} borderRadius="xl" bg="rgba(250, 173, 20, 0.15)" color="warning.600">
@@ -104,19 +102,19 @@ const InterviewTracker = ({ members = [] }) => {
       </SimpleGrid>
 
       {/* Active Interviews by Department */}
-      {activeInterviewees.length === 0 ? (
+      {activeSessions.length === 0 ? (
         <Box textAlign="center" py={16} bg="white" borderWidth="1px" borderColor="gray.200" borderRadius="xl">
           <Box as={FaChartBar} boxSize={12} color="gray.200" mx="auto" mb={3} />
           <Text fontSize="md" fontWeight="medium" color="gray.600">
             Hiện tại không có lượt phỏng vấn nào đang diễn ra
           </Text>
           <Text fontSize="xs" color="gray.300" mt={1}>
-            Khi admin bấm &ldquo;Gọi PV&rdquo; từ tab Quản lý ứng viên, danh sách sẽ hiển thị tự động tại đây
+            Khi admin bấm &ldquo;Gọi PV&rdquo; (mảng chính hoặc mảng phụ), danh sách sẽ hiển thị tự động tại đây
           </Text>
         </Box>
       ) : (
         <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4}>
-          {Object.entries(groupedBySpecialist).map(([dept, candidates]) => (
+          {Object.entries(groupedByDepartment).map(([dept, sessions]) => (
             <Box
               key={dept}
               p={5}
@@ -132,19 +130,19 @@ const InterviewTracker = ({ members = [] }) => {
                   {dept}
                 </Heading>
                 <Badge bg="gray.100" color="gray.600" fontSize="11px" px={2} py={0.5} borderRadius="full">
-                  {candidates.length} người
+                  {sessions.length} lượt
                 </Badge>
               </Flex>
 
               <Divider borderColor="gray.200" mb={4} />
 
               <VStack spacing={3} align="stretch" flex="1">
-                {candidates.map((candidate) => {
-                  const isInInterview = candidate.state === 'Đang phỏng vấn';
+                {sessions.map((session) => {
+                  const isInInterview = session.state === 'Đang phỏng vấn';
 
                   return (
                     <Box
-                      key={candidate.id}
+                      key={session.uniqueKey}
                       p={3.5}
                       borderRadius="lg"
                       bg={isInInterview ? 'rgba(114, 46, 209, 0.06)' : 'gray.50'}
@@ -164,17 +162,28 @@ const InterviewTracker = ({ members = [] }) => {
                         />
                       )}
 
-                      <Flex justify="space-between" align="flex-start">
+                      <Flex justify="space-between" align="flex-start" gap={2}>
                         <Box pl={isInInterview ? 1.5 : 0}>
-                          <Text fontWeight="bold" color="gray.900" fontSize="sm">
-                            {candidate.name}
+                          <HStack spacing={1.5} align="center" flexWrap="wrap">
+                            <Text fontWeight="bold" color="gray.900" fontSize="sm">
+                              {session.candidateName}
+                            </Text>
+                            {session.isSubDept ? (
+                              <Badge colorScheme="purple" fontSize="10px" px={1.5} py={0.5} borderRadius="md">
+                                Mảng phụ
+                              </Badge>
+                            ) : (
+                              <Badge colorScheme="green" fontSize="10px" px={1.5} py={0.5} borderRadius="md">
+                                Mảng chính
+                              </Badge>
+                            )}
+                          </HStack>
+                          <Text fontSize="xs" color="primary.600" fontFamily="mono" mt={0.5}>
+                            {session.candidateMSSV}
                           </Text>
-                          <Text fontSize="xs" color="primary.600" fontFamily="mono">
-                            {candidate.MSSV}
-                          </Text>
-                          {candidate.major_class && (
+                          {session.major_class && (
                             <Text fontSize="11px" color="gray.400" mt={0.5}>
-                              {candidate.major_class}
+                              {session.major_class}
                             </Text>
                           )}
                         </Box>
@@ -187,8 +196,9 @@ const InterviewTracker = ({ members = [] }) => {
                           fontSize="xs"
                           px={2}
                           py={0.5}
+                          whiteSpace="nowrap"
                         >
-                          {candidate.state}
+                          {session.state}
                         </Badge>
                       </Flex>
                     </Box>
@@ -204,3 +214,4 @@ const InterviewTracker = ({ members = [] }) => {
 };
 
 export default InterviewTracker;
+

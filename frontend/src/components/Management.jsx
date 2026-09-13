@@ -73,6 +73,7 @@ import {
   SUB_INTERVIEW_STATES,
   isSubDeptLocked,
   isSubDeptInterviewLocked,
+  isMemberInActiveInterview,
   parseSubDepartments,
   parseSubDepartmentStates,
 } from '../config';
@@ -125,7 +126,7 @@ const Management = ({ members, setMembers }) => {
     return {
       total: members.length,
       checkedIn: members.filter((m) => m.state === 'Đã checkin').length,
-      interviewing: members.filter((m) => m.state === 'Đang phỏng vấn' || m.state === 'Gọi PV').length,
+      interviewing: members.filter(isMemberInActiveInterview).length,
       completed: members.filter((m) => m.state === 'Đã phỏng vấn').length,
     };
   }, [members]);

@@ -29,7 +29,7 @@ import AuditLogHistory from './components/AuditLogHistory';
 import Checkin from './components/Checkin';
 import CheckinQr from './components/CheckinQr';
 import api from './api/axios';
-import { BASE_URL, DEPARTMENT_LABELS } from './config';
+import { BASE_URL, DEPARTMENT_LABELS, isMemberInActiveInterview } from './config';
 
 const TAB_TITLES = [
   { title: 'Duyệt hồ sơ vòng đơn', subtitle: 'Sàng lọc hồ sơ ứng viên đăng ký tuyển thành viên' },
@@ -338,7 +338,7 @@ function App() {
     return {
       pending: members.filter((m) => m.state === 'Chờ duyệt').length,
       total: members.length,
-      interviewing: members.filter((m) => m.state === 'Đang phỏng vấn' || m.state === 'Gọi PV').length,
+      interviewing: members.filter(isMemberInActiveInterview).length,
     };
   }, [members]);
 
