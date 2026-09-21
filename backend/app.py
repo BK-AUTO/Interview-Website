@@ -4,6 +4,7 @@ import secrets
 import uuid
 import json
 import queue
+import random
 import threading
 import csv
 import io
@@ -134,36 +135,64 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor.close()
 
 # --- Lightweight Thread-safe SSE Broadcaster ---
+# Single-process, in-memory pub/sub: every listener queue lives in this
+# worker's heap. This is why the backend MUST keep running as a single
+# gunicorn worker (see Dockerfile) — spreading listeners across multiple
+# worker processes would mean events announced in one process silently never
+# reach clients connected to another. If this ever needs to scale beyond one
+# process/instance, this broadcaster has to move to a shared bus (e.g. Redis
+# pub/sub) instead of an in-memory list.
+SSE_QUEUE_MAXSIZE = 300
+
 class MessageAnnouncer:
-    """Thread-safe Server-Sent Events broadcaster with automatic dead listener cleanup."""
+    """Thread-safe Server-Sent Events broadcaster.
+
+    Slow consumers never get silently abandoned: once a listener's queue is
+    full we drop its oldest queued message to make room for the newest one,
+    rather than dropping the listener itself. Every event we announce carries
+    a full member snapshot (not a diff), so losing a stale intermediate event
+    is harmless as long as the connection keeps receiving newer ones — and
+    the connection self-heals instead of freezing silently. Actual listener
+    cleanup only happens when the client itself disconnects (GeneratorExit).
+    """
     def __init__(self):
         self.listeners = []
         self.lock = threading.Lock()
 
     def listen(self):
-        q = queue.Queue(maxsize=100)
+        q = queue.Queue(maxsize=SSE_QUEUE_MAXSIZE)
         with self.lock:
             self.listeners.append(q)
+            count = len(self.listeners)
+        logging.info(f"SSE client connected ({count} active)")
         return q
 
     def announce(self, event_name: str, data: dict):
         formatted_data = json.dumps(data, ensure_ascii=False)
         msg = f"event: {event_name}\ndata: {formatted_data}\n\n"
         with self.lock:
-            dead_listeners = []
             for q in self.listeners:
                 try:
                     q.put_nowait(msg)
                 except queue.Full:
-                    dead_listeners.append(q)
-            for q in dead_listeners:
-                if q in self.listeners:
-                    self.listeners.remove(q)
+                    # Slow consumer: evict the oldest queued message instead
+                    # of dropping the client, so it stays connected and
+                    # simply catches up on the latest state.
+                    try:
+                        q.get_nowait()
+                    except queue.Empty:
+                        pass
+                    try:
+                        q.put_nowait(msg)
+                    except queue.Full:
+                        pass
 
     def remove_listener(self, q):
         with self.lock:
             if q in self.listeners:
                 self.listeners.remove(q)
+            count = len(self.listeners)
+        logging.info(f"SSE client disconnected ({count} active)")
 
 announcer = MessageAnnouncer()
 
@@ -1282,17 +1311,26 @@ def confirm_reschedule(token):
 def sse_events():
     """Server-Sent Events endpoint for realtime one-way streaming updates."""
     token = request.args.get('token')
-    if token:
-        try:
-            decode_token(token)
-        except Exception as e:
-            logging.warning(f"SSE connection with invalid token: {e}")
+    if not token:
+        return jsonify({'message': 'Missing authentication token'}), 401
+    try:
+        decode_token(token)
+    except Exception as e:
+        logging.warning(f"SSE connection rejected, invalid token: {e}")
+        return jsonify({'message': 'Invalid or expired token'}), 401
 
     def stream():
         q = announcer.listen()
-        # Initial greeting event
-        yield f"event: connected\ndata: {json.dumps({'status': 'ok'})}\n\n"
         try:
+            # Randomized reconnect delay: if the server restarts (or a proxy
+            # briefly drops every connection), every open dashboard would
+            # otherwise reconnect at the same instant. Jittering `retry`
+            # per-connection spreads that reconnect storm out over a window
+            # instead of everyone hammering the backend at once.
+            retry_ms = random.randint(3000, 6000)
+            yield f"retry: {retry_ms}\n\n"
+            # Initial greeting event
+            yield f"event: connected\ndata: {json.dumps({'status': 'ok'})}\n\n"
             while True:
                 try:
                     # 20-second timeout to send keepalive comment to keep proxy connection alive

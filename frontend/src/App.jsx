@@ -92,6 +92,18 @@ function App() {
   const toast = useToast();
   const eventSourceRef = useRef(null);
   const isDesktop = useBreakpointValue({ base: false, lg: true });
+  // Distinguishes the very first SSE handshake (state already loaded by the
+  // explicit fetchMembers() call below) from a later reconnect after a drop
+  // (network blip, server restart, proxy idle-timeout). The broadcaster only
+  // fans events out to listeners that are live at the time, so anything
+  // announced while we were disconnected is gone for good — a reconnect has
+  // to trigger a full resync or the dashboard silently drifts out of date.
+  const hasConnectedOnceRef = useRef(false);
+  // Rolling batch state for bursty 'member_added' events (e.g. many
+  // candidates submitting the public application form around a deadline).
+  // Instead of stacking one toast per candidate, a burst collapses into a
+  // single toast that keeps updating with the running count.
+  const memberAddedBatchRef = useRef({ count: 0, resetTimer: null });
 
   // Authentik OIDC redirect error handler and 401 session expiry listener
   useEffect(() => {
@@ -158,6 +170,13 @@ function App() {
 
         es.addEventListener('connected', () => {
           setSocketConnected(true);
+          if (hasConnectedOnceRef.current) {
+            // Reconnected after a drop: resync in case any events were
+            // announced while we had no listener registered on the server.
+            fetchMembers();
+          } else {
+            hasConnectedOnceRef.current = true;
+          }
         });
 
         es.addEventListener('member_added', (e) => {
@@ -165,13 +184,35 @@ function App() {
             const newMember = JSON.parse(e.data);
             setMembers((prev) => [...prev, newMember]);
             window.dispatchEvent(new CustomEvent('app:data-updated'));
-            toast({
-              title: 'Hồ sơ mới nộp',
-              description: `${newMember.name} vừa nộp đơn ứng tuyển`,
-              status: 'info',
-              duration: 3500,
-              isClosable: true,
-            });
+
+            const batch = memberAddedBatchRef.current;
+            batch.count += 1;
+            const toastId = 'member-added-batch';
+            const description =
+              batch.count === 1
+                ? `${newMember.name} vừa nộp đơn ứng tuyển`
+                : `${batch.count} ứng viên vừa nộp đơn (mới nhất: ${newMember.name})`;
+            if (toast.isActive(toastId)) {
+              toast.update(toastId, {
+                title: 'Hồ sơ mới nộp',
+                description,
+                status: 'info',
+                duration: 3500,
+              });
+            } else {
+              toast({
+                id: toastId,
+                title: 'Hồ sơ mới nộp',
+                description,
+                status: 'info',
+                duration: 3500,
+                isClosable: true,
+              });
+            }
+            clearTimeout(batch.resetTimer);
+            batch.resetTimer = setTimeout(() => {
+              batch.count = 0;
+            }, 4000);
           } catch (err) {
             console.error('Error parsing SSE member_added:', err);
           }
@@ -326,6 +367,9 @@ function App() {
         return () => {
           es.close();
           eventSourceRef.current = null;
+          hasConnectedOnceRef.current = false;
+          clearTimeout(memberAddedBatchRef.current.resetTimer);
+          memberAddedBatchRef.current.count = 0;
         };
       } catch (error) {
         console.error('Error setting up SSE EventSource:', error);
