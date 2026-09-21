@@ -73,6 +73,14 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 }
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'jwt-secret-string')  # override in production
+# Flask-JWT-Extended defaults to a 15-minute access token with no refresh-token
+# flow in this app. Admins keep the interview tracker dashboard (and its SSE
+# connection) open for an entire interview day, so a token that short forces
+# an unexpected logout — and silently kills the SSE stream, since a browser's
+# EventSource does not retry after a fatal 401 (only after network-level
+# drops). 12h comfortably covers a working day; revisit if a real
+# refresh-token flow is added later.
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=12)
 
 # Public application submissions (/api/apply) carry candidate PII, so they get
 # a narrower CORS allowlist than the rest of /api/* (used internally by the

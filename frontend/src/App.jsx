@@ -153,19 +153,42 @@ function App() {
 
   // Initialize Native Server-Sent Events (SSE) connection when authenticated
   useEffect(() => {
-    if (isAuthenticated) {
+    if (!isAuthenticated) return undefined;
+
+    let reconnectTimer = null;
+    let reconnectAttempts = 0;
+
+    const connect = () => {
       try {
         const token = localStorage.getItem('token');
-        const sseUrl = `${BASE_URL}/api/events${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+        if (!token) return;
+        const sseUrl = `${BASE_URL}/api/events?token=${encodeURIComponent(token)}`;
         const es = new EventSource(sseUrl);
         eventSourceRef.current = es;
 
         es.onopen = () => {
           setSocketConnected(true);
+          reconnectAttempts = 0;
         };
 
         es.onerror = () => {
           setSocketConnected(false);
+          // EventSource only auto-retries after a transient network-level
+          // drop. A fatal failure (e.g. the server rejecting an invalid or
+          // expired token with 401) closes the connection for good — without
+          // this, the dashboard would show "Mất kết nối realtime" forever
+          // until a manual page reload. Reconnect with backoff, re-reading
+          // the token in case a newer one is now in localStorage.
+          if (es.readyState === EventSource.CLOSED) {
+            es.close();
+            if (eventSourceRef.current === es) {
+              eventSourceRef.current = null;
+            }
+            reconnectAttempts += 1;
+            const delay = Math.min(3000 * reconnectAttempts, 30000) + Math.random() * 1000;
+            clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(connect, delay);
+          }
         };
 
         es.addEventListener('connected', () => {
@@ -362,19 +385,24 @@ function App() {
           }
         });
 
-        fetchMembers();
-
-        return () => {
-          es.close();
-          eventSourceRef.current = null;
-          hasConnectedOnceRef.current = false;
-          clearTimeout(memberAddedBatchRef.current.resetTimer);
-          memberAddedBatchRef.current.count = 0;
-        };
       } catch (error) {
         console.error('Error setting up SSE EventSource:', error);
       }
-    }
+    };
+
+    connect();
+    fetchMembers();
+
+    return () => {
+      clearTimeout(reconnectTimer);
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+      eventSourceRef.current = null;
+      hasConnectedOnceRef.current = false;
+      clearTimeout(memberAddedBatchRef.current.resetTimer);
+      memberAddedBatchRef.current.count = 0;
+    };
   }, [isAuthenticated, toast]);
 
   // Sidebar badge statistics
