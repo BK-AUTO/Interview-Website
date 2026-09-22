@@ -122,6 +122,19 @@ export const parseSubDepartmentStates = (states) => {
   }
 };
 
+// Sub-department interview table/room numbers, keyed by sub-dept — same
+// shape as parseSubDepartmentStates.
+export const parseSubDepartmentTables = (tables) => {
+  if (!tables) return {};
+  if (typeof tables === 'object' && !Array.isArray(tables)) return tables;
+  try {
+    const parsed = JSON.parse(tables);
+    return typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
 // Main state pipeline order (numerical index for sequential gate comparison)
 export const MAIN_STATE_ORDER = {
   'Chờ duyệt': 0,
@@ -209,11 +222,13 @@ export function getMemberActiveInterviewSessions(member) {
       deptLabel: DEPARTMENT_LABELS[member.specialist] || member.specialist || 'Chung / Chưa phân mảng',
       state: member.state,
       isSubDept: false,
+      table: member.interview_table || null,
     });
   }
 
   // 2. Sub-department sessions
   const subStates = parseSubDepartmentStates(member.sub_department_states);
+  const subTables = parseSubDepartmentTables(member.sub_department_tables);
   Object.entries(subStates).forEach(([subKey, subState]) => {
     if (subState === 'Đang phỏng vấn' || subState === 'Gọi PV') {
       sessions.push({
@@ -227,6 +242,7 @@ export function getMemberActiveInterviewSessions(member) {
         state: subState,
         isSubDept: true,
         subDeptKey: subKey,
+        table: subTables[subKey] || null,
       });
     }
   });

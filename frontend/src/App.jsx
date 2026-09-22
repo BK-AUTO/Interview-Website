@@ -285,7 +285,9 @@ function App() {
             window.dispatchEvent(new CustomEvent('app:data-updated'));
             toast({
               title: 'Gọi phỏng vấn',
-              description: `${interviewMember.name} đã được gọi vào phòng phỏng vấn`,
+              description: interviewMember.interview_table
+                ? `${interviewMember.name} đã được gọi vào ${interviewMember.interview_table}`
+                : `${interviewMember.name} đã được gọi vào phòng phỏng vấn`,
               status: 'warning',
               duration: 3500,
               isClosable: true,

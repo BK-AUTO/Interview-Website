@@ -67,6 +67,7 @@ import {
 } from 'react-icons/fa';
 import api from '../api/axios';
 import CandidateDetailModal from './CandidateDetailModal';
+import CallTableDialog from './CallTableDialog';
 import {
   DEPARTMENT_LABELS,
   TRACK_LABELS,
@@ -79,6 +80,7 @@ import {
   isMemberInActiveInterview,
   parseSubDepartments,
   parseSubDepartmentStates,
+  parseSubDepartmentTables,
   getSubDeptNextAction,
 } from '../config';
 import { openCandidateCV } from '../utils/cvCache';
@@ -107,6 +109,9 @@ const Management = ({ members, setMembers }) => {
   const [selectedMember, setSelectedMember] = useState(null);
   const [detailCandidate, setDetailCandidate] = useState(null);
   const [isAdvancingId, setIsAdvancingId] = useState(null);
+  // { member, subKey: string|null } while the "enter table number" dialog is
+  // open for a pending 'Gọi PV' call; null when closed.
+  const [callPrompt, setCallPrompt] = useState(null);
 
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
   const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
@@ -440,20 +445,30 @@ const Management = ({ members, setMembers }) => {
   };
 
   // State pipeline advance: 'Đã checkin' -> 'Gọi PV' -> 'Đang phỏng vấn' -> 'Đã phỏng vấn'
-  const handleAdvanceMainState = async (member) => {
+  // Advancing into 'Gọi PV' needs a table number first: called with `table`
+  // undefined, this opens the prompt instead of calling the API; the dialog
+  // then re-invokes it with the entered value.
+  const handleAdvanceMainState = async (member, table) => {
     let nextState = '';
     if (member.state === 'Đã checkin') nextState = 'Gọi PV';
     else if (member.state === 'Gọi PV') nextState = 'Đang phỏng vấn';
     else if (member.state === 'Đang phỏng vấn') nextState = 'Đã phỏng vấn';
     else return;
 
+    if (nextState === 'Gọi PV' && table === undefined) {
+      setCallPrompt({ member, subKey: null });
+      return;
+    }
+
     setIsAdvancingId(member.id);
     try {
-      const response = await api.put(`/api/members/${member.id}`, { state: nextState });
+      const payload = { state: nextState };
+      if (nextState === 'Gọi PV') payload.table = table;
+      const response = await api.put(`/api/members/${member.id}`, payload);
       setMembers((prev) => prev.map((m) => (m.id === member.id ? response.data.member : m)));
       toast({
         title: `Mảng chính: ${nextState}`,
-        description: `${member.name} (${DEPARTMENT_LABELS[member.specialist] || member.specialist}) -> ${nextState}`,
+        description: `${member.name} (${DEPARTMENT_LABELS[member.specialist] || member.specialist}) -> ${nextState}${table ? ` · ${table}` : ''}`,
         status: 'info',
         duration: 2500,
         isClosable: true,
@@ -466,19 +481,25 @@ const Management = ({ members, setMembers }) => {
     }
   };
 
-  // Independent Sub-Department State transition
-  const handleUpdateSubDeptState = async (member, subKey, newSubState) => {
+  // Independent Sub-Department State transition. Same table-prompt gating as
+  // handleAdvanceMainState, scoped to this sub-department only.
+  const handleUpdateSubDeptState = async (member, subKey, newSubState, table) => {
+    if (newSubState === 'Gọi PV' && table === undefined) {
+      setCallPrompt({ member, subKey });
+      return;
+    }
+
     const currentSubStates = parseSubDepartmentStates(member.sub_department_states);
     const updatedSubStates = { ...currentSubStates, [subKey]: newSubState };
 
     try {
-      const response = await api.put(`/api/members/${member.id}`, {
-        sub_department_states: updatedSubStates,
-      });
+      const payload = { sub_department_states: updatedSubStates };
+      if (newSubState === 'Gọi PV') payload.sub_department_tables = { [subKey]: table };
+      const response = await api.put(`/api/members/${member.id}`, payload);
       setMembers((prev) => prev.map((m) => (m.id === member.id ? response.data.member : m)));
       toast({
         title: `Mảng phụ [${DEPARTMENT_LABELS[subKey] || subKey}]: ${newSubState}`,
-        description: `Đã cập nhật tiến độ phỏng vấn mảng phụ của ${member.name}`,
+        description: `Đã cập nhật tiến độ phỏng vấn mảng phụ của ${member.name}${table ? ` · ${table}` : ''}`,
         status: 'success',
         duration: 2500,
         isClosable: true,
@@ -495,8 +516,32 @@ const Management = ({ members, setMembers }) => {
     }
   };
 
+  const handleConfirmCall = (table) => {
+    if (!callPrompt) return;
+    const { member, subKey } = callPrompt;
+    setCallPrompt(null);
+    if (subKey) {
+      handleUpdateSubDeptState(member, subKey, 'Gọi PV', table);
+    } else {
+      handleAdvanceMainState(member, table);
+    }
+  };
+
   return (
     <Box pb={8}>
+      <CallTableDialog
+        isOpen={!!callPrompt}
+        candidateName={callPrompt?.member?.name}
+        deptLabel={
+          callPrompt?.subKey
+            ? DEPARTMENT_LABELS[callPrompt.subKey] || callPrompt.subKey
+            : callPrompt
+            ? DEPARTMENT_LABELS[callPrompt.member.specialist] || callPrompt.member.specialist
+            : ''
+        }
+        onConfirm={handleConfirmCall}
+        onCancel={() => setCallPrompt(null)}
+      />
       {/* Page Title */}
       <Box mb={6}>
         <HStack spacing={3} mb={1}>
@@ -846,6 +891,11 @@ const Management = ({ members, setMembers }) => {
                           >
                             {member.state}
                           </Badge>
+                          {member.interview_table && (member.state === 'Gọi PV' || member.state === 'Đang phỏng vấn') && (
+                            <Badge colorScheme="purple" variant="outline" fontSize="10px" px={1.5}>
+                              📍 {member.interview_table}
+                            </Badge>
+                          )}
                           {advanceLabel && (
                             <Button
                               size="xs"
@@ -876,6 +926,7 @@ const Management = ({ members, setMembers }) => {
                                 borderColor: 'gray.200',
                               };
                               const nextAction = getSubDeptNextAction(member.state, currentSubState);
+                              const subTable = parseSubDepartmentTables(member.sub_department_tables)[sub];
 
                               return (
                                 <Box key={sub} w="full">
@@ -969,6 +1020,11 @@ const Management = ({ members, setMembers }) => {
                                             </MenuOptionGroup>
                                           </MenuList>
                                         </Menu>
+                                      )}
+                                      {subTable && (currentSubState === 'Gọi PV' || currentSubState === 'Đang phỏng vấn') && (
+                                        <Badge colorScheme="purple" variant="outline" fontSize="10px" px={1.5}>
+                                          📍 {subTable}
+                                        </Badge>
                                       )}
                                     </HStack>
 

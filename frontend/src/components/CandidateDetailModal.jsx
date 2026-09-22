@@ -58,11 +58,13 @@ import {
   SUB_INTERVIEW_STATES,
   parseSubDepartments,
   parseSubDepartmentStates,
+  parseSubDepartmentTables,
   isSubDeptLocked,
   isSubDeptInterviewLocked,
   getSubDeptNextAction,
 } from '../config';
 import { openCandidateCV } from '../utils/cvCache';
+import CallTableDialog from './CallTableDialog';
 
 const STATE_BADGE_PROPS = {
   'Chờ duyệt': { bg: 'gray.100', color: 'gray.600', borderColor: 'gray.200' },
@@ -80,6 +82,7 @@ const STATE_BADGE_PROPS = {
 const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers }) => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [callPrompt, setCallPrompt] = useState(null); // { subKey: string|null } while the table-number dialog is open
   const toast = useToast();
 
   // Sync candidate data with live members state when updates arrive
@@ -115,7 +118,10 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
     }
   }, [isOpen, liveCandidate?.id, fetchLogs]);
 
-  const handleAdvanceMainState = async () => {
+  // Advancing into 'Gọi PV' needs a table number first: called with `table`
+  // undefined, this opens the prompt instead of calling the API; the dialog
+  // then re-invokes it with the entered value.
+  const handleAdvanceMainState = async (table) => {
     if (!liveCandidate) return;
     let nextState = '';
     if (liveCandidate.state === 'Đã checkin') nextState = 'Gọi PV';
@@ -123,12 +129,19 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
     else if (liveCandidate.state === 'Đang phỏng vấn') nextState = 'Đã phỏng vấn';
     else return;
 
+    if (nextState === 'Gọi PV' && table === undefined) {
+      setCallPrompt({ subKey: null });
+      return;
+    }
+
     try {
-      const res = await api.put(`/api/members/${liveCandidate.id}`, { state: nextState });
+      const payload = { state: nextState };
+      if (nextState === 'Gọi PV') payload.table = table;
+      const res = await api.put(`/api/members/${liveCandidate.id}`, payload);
       if (setMembers) {
         setMembers((prev) => prev.map((m) => (m.id === liveCandidate.id ? res.data.member : m)));
       }
-      toast({ title: `Mảng chính: ${nextState}`, status: 'info', duration: 2500, isClosable: true });
+      toast({ title: `Mảng chính: ${nextState}${table ? ` · ${table}` : ''}`, status: 'info', duration: 2500, isClosable: true });
       fetchLogs();
     } catch (err) {
       toast({
@@ -141,19 +154,25 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
     }
   };
 
-  const handleUpdateSubDeptState = async (subKey, newSubState) => {
+  const handleUpdateSubDeptState = async (subKey, newSubState, table) => {
     if (!liveCandidate) return;
+
+    if (newSubState === 'Gọi PV' && table === undefined) {
+      setCallPrompt({ subKey });
+      return;
+    }
+
     const subStates = parseSubDepartmentStates(liveCandidate.sub_department_states);
     const updated = { ...subStates, [subKey]: newSubState };
     try {
-      const res = await api.put(`/api/members/${liveCandidate.id}`, {
-        sub_department_states: updated,
-      });
+      const payload = { sub_department_states: updated };
+      if (newSubState === 'Gọi PV') payload.sub_department_tables = { [subKey]: table };
+      const res = await api.put(`/api/members/${liveCandidate.id}`, payload);
       if (setMembers) {
         setMembers((prev) => prev.map((m) => (m.id === liveCandidate.id ? res.data.member : m)));
       }
       toast({
-        title: `Mảng phụ [${DEPARTMENT_LABELS[subKey] || subKey}]: ${newSubState}`,
+        title: `Mảng phụ [${DEPARTMENT_LABELS[subKey] || subKey}]: ${newSubState}${table ? ` · ${table}` : ''}`,
         status: 'success',
         duration: 2500,
         isClosable: true,
@@ -205,8 +224,30 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
     mainAdvanceColor = 'success';
   }
 
+  const handleConfirmCall = (table) => {
+    if (!callPrompt) return;
+    const { subKey } = callPrompt;
+    setCallPrompt(null);
+    if (subKey) {
+      handleUpdateSubDeptState(subKey, 'Gọi PV', table);
+    } else {
+      handleAdvanceMainState(table);
+    }
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="2xl" scrollBehavior="inside">
+      <CallTableDialog
+        isOpen={!!callPrompt}
+        candidateName={liveCandidate.name}
+        deptLabel={
+          callPrompt?.subKey
+            ? DEPARTMENT_LABELS[callPrompt.subKey] || callPrompt.subKey
+            : DEPARTMENT_LABELS[liveCandidate.specialist] || liveCandidate.specialist
+        }
+        onConfirm={handleConfirmCall}
+        onCancel={() => setCallPrompt(null)}
+      />
       <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(4px)" />
       <ModalContent
         bg="white"
@@ -514,6 +555,11 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
                   >
                     {liveCandidate.state}
                   </Badge>
+                  {liveCandidate.interview_table && (liveCandidate.state === 'Gọi PV' || liveCandidate.state === 'Đang phỏng vấn') && (
+                    <Badge colorScheme="purple" variant="outline" fontSize="xs" px={2} py={0.5}>
+                      📍 {liveCandidate.interview_table}
+                    </Badge>
+                  )}
                 </HStack>
 
                 {/* Main Department Advance Button & State Selector */}
@@ -524,7 +570,7 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
                     rightIcon={<FaArrowRight />}
                     w="full"
                     mb={2}
-                    onClick={handleAdvanceMainState}
+                    onClick={() => handleAdvanceMainState()}
                   >
                     {mainAdvanceLabel}
                   </Button>
@@ -620,6 +666,7 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
                         borderColor: 'gray.200',
                       };
                       const nextAction = getSubDeptNextAction(liveCandidate.state, currentSubState);
+                      const subTable = parseSubDepartmentTables(liveCandidate.sub_department_tables)[sub];
 
                       return (
                         <Box
@@ -717,6 +764,11 @@ const CandidateDetailModal = ({ isOpen, onClose, candidate, members, setMembers 
                                     </MenuOptionGroup>
                                   </MenuList>
                                 </Menu>
+                              )}
+                              {subTable && (currentSubState === 'Gọi PV' || currentSubState === 'Đang phỏng vấn') && (
+                                <Badge colorScheme="purple" variant="outline" fontSize="10px" px={1.5}>
+                                  📍 {subTable}
+                                </Badge>
                               )}
 
                               {/* Sequential advance action buttons */}

@@ -279,6 +279,13 @@ class Member(db.Model):
     student_type = db.Column(db.String(20))  # 'hust' / 'external'
     sub_departments = db.Column(db.String(300))  # JSON array string, e.g. '["electrical","simulation"]'
     sub_department_states = db.Column(db.String(500), nullable=True, default='{}')  # JSON dict e.g. '{"communication": "Đã phỏng vấn"}'
+    # Interview room/desk number, set by the admin at the moment they call a
+    # candidate in ('Gọi PV'). Main department uses a single column since it
+    # only ever has one active session; sub-departments can run concurrently
+    # on different tables, so they get their own JSON dict keyed by sub-dept,
+    # mirroring sub_department_states.
+    interview_table = db.Column(db.String(50), nullable=True)
+    sub_department_tables = db.Column(db.String(500), nullable=True, default='{}')  # JSON dict e.g. '{"communication": "Bàn 3"}'
     linkCV = db.Column(db.String(500))  # Increased size for long URLs
     checkin_time = db.Column(db.String(100), nullable=True)
     state = db.Column(db.String(100), nullable=True, default='Chưa checkin', index=True)
@@ -307,6 +314,8 @@ def member_to_dict(member):
         'application_track': member.application_track or 'engineering',
         'sub_departments': member.sub_departments,
         'sub_department_states': member.sub_department_states or '{}',
+        'interview_table': member.interview_table,
+        'sub_department_tables': member.sub_department_tables or '{}',
         'linkCV': member.linkCV,
         'checkin_time': member.checkin_time,
         'state': member.state,
@@ -733,6 +742,34 @@ def edit_member(id):
 
                 member.sub_department_states = json.dumps(parsed_sub_val)
 
+            # Per-sub-department interview table/room number, set alongside
+            # sub_department_states when the admin calls a candidate in for a
+            # given sub-department. Merged (not replaced) since sub-depts run
+            # independent, concurrent sessions and a PUT here is usually only
+            # updating one of them at a time.
+            if 'sub_department_tables' in data:
+                table_val = data['sub_department_tables']
+                if isinstance(table_val, str):
+                    try:
+                        parsed_table_val = json.loads(table_val)
+                    except Exception:
+                        return jsonify({'error': 'Dữ liệu bàn mảng phụ không đúng định dạng JSON'}), 400
+                elif isinstance(table_val, dict):
+                    parsed_table_val = table_val
+                else:
+                    return jsonify({'error': 'Dữ liệu bàn mảng phụ không hợp lệ'}), 400
+
+                existing_sub_tables = {}
+                if member.sub_department_tables:
+                    try:
+                        existing_sub_tables = json.loads(member.sub_department_tables) if isinstance(member.sub_department_tables, str) else member.sub_department_tables
+                        if not isinstance(existing_sub_tables, dict):
+                            existing_sub_tables = {}
+                    except Exception:
+                        existing_sub_tables = {}
+                existing_sub_tables.update(parsed_table_val)
+                member.sub_department_tables = json.dumps(existing_sub_tables)
+
             member.linkCV = data.get('linkCV', member.linkCV)
             member.note = data.get('note', member.note)
             if 'school' in data:
@@ -743,6 +780,12 @@ def edit_member(id):
             # Check for state change
             if 'state' in data:
                 member.state = data['state']
+
+            # Main-department interview table/room number, set alongside
+            # state when the admin calls a candidate in ('Gọi PV').
+            if 'table' in data:
+                table_value = (data.get('table') or '').strip()
+                member.interview_table = table_value or None
 
             # Auto-initialize sub_department_states for registered sub_departments when passing screening (main_level >= 1)
             if main_level >= 1 and member.sub_departments:
@@ -1367,6 +1410,18 @@ def ensure_schema():
         try:
             with db.engine.connect() as conn:
                 conn.execute(db.text("ALTER TABLE member ADD COLUMN confirm_password VARCHAR(20)"))
+                conn.commit()
+        except Exception:
+            pass
+        try:
+            with db.engine.connect() as conn:
+                conn.execute(db.text("ALTER TABLE member ADD COLUMN interview_table VARCHAR(50)"))
+                conn.commit()
+        except Exception:
+            pass
+        try:
+            with db.engine.connect() as conn:
+                conn.execute(db.text("ALTER TABLE member ADD COLUMN sub_department_tables TEXT DEFAULT '{}'"))
                 conn.commit()
         except Exception:
             pass
