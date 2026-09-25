@@ -1,3 +1,124 @@
+================= 1. PROJECT STRUCTURE =================
+
+./
+    .gitignore
+    docker-compose.yml
+    docker-run.sh
+    dump_project.py
+    import.py
+    memberlist.csv
+    backend/
+        .dockerignore
+        .env.example
+        app.py
+        createtable.py
+        Dockerfile
+        migrate_audit_log.py
+        migrate_screening_fields.py
+        requirements.txt
+        wsgi.py
+        backend/
+            instance/
+        instance/
+    frontend/
+        .dockerignore
+        Dockerfile
+        eslint.config.js
+        index.html
+        nginx.conf
+        package-lock.json
+        package.json
+        pnpm-lock.yaml
+        pnpm-workspace.yaml
+        README.md
+        vite.config.js
+        public/
+        src/
+            App.jsx
+            config.js
+            index.css
+            main.jsx
+            theme.js
+            api/
+                axios.js
+            components/
+                ApplicationScreening.jsx
+                ApprovedCandidates.jsx
+                AuditLogHistory.jsx
+                CallTableDialog.jsx
+                CandidateDetailModal.jsx
+                Checkin.jsx
+                CheckinQr.jsx
+                ConfirmCredentialsModal.jsx
+                EventManger.jsx
+                InterviewTracker.jsx
+                Login.jsx
+                Management.jsx
+                Register.jsx
+                Sidebar.jsx
+                WebsiteManagement.jsx
+            hooks/
+                useInterviewCallChime.js
+            pages/
+                ConfirmParticipation.jsx
+            utils/
+                cvCache.js
+    instance/
+
+
+================= 2. KEY FILES CONTENT =================
+
+
+--- FILE: .\docker-compose.yml ---
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: interview-backend
+    ports:
+      - "8091:8091"
+    volumes:
+      - ./backend/instance:/app/instance
+      - ./backend/uploads:/app/uploads
+    env_file:
+      - ./backend/.env
+    environment:
+      - FLASK_ENV=production
+      - DATABASE_URL=sqlite:///new.db
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8091/api/health\", timeout=2)' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=
+    container_name: interview-frontend
+    ports:
+      - "5700:5700"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+
+--- FILE: .\backend\app.py ---
 import os
 import re
 import secrets
@@ -22,7 +143,6 @@ from sqlalchemy import or_, event
 from sqlalchemy.engine import Engine
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, get_jwt, decode_token
 from authlib.integrations.flask_client import OAuth
-from mailer import send_confirmation_email_async
 
 app = Flask(__name__)
 
@@ -1286,40 +1406,14 @@ def confirm_check_token(token):
     member = Member.query.filter_by(confirm_token=token).first()
     return jsonify({'valid': bool(member)}), (200 if member else 404)
 
-@app.route('/api/confirm/<token>/confirm', methods=['POST'])
-def confirm_participation(token):
+@app.route('/api/confirm/<token>/verify', methods=['POST'])
+def confirm_verify(token):
     member = Member.query.filter_by(confirm_token=token).first()
     if not member:
         return jsonify({'message': 'Link không hợp lệ hoặc đã hết hạn'}), 404
     password = (request.get_json(silent=True) or {}).get('password')
     if not check_confirm_password(member, password):
         return jsonify({'message': 'Mật khẩu không đúng'}), 401
-    if member.state not in ('Đậu vòng đơn', 'Xin đổi lịch'):
-        return jsonify({'message': f"Không thể xác nhận từ trạng thái hiện tại"}), 400
-
-    member.state = 'Đã xác nhận'
-    member.confirmed_at = format_gmt7_time()
-    db.session.commit()
-
-    record_audit_log(
-        member_id=member.id,
-        action='Xác nhận tham gia phỏng vấn',
-        details='Ứng viên tự xác nhận tham gia buổi phỏng vấn qua link và mật khẩu bảo mật',
-        actor={'username': member.MSSV, 'name': member.name, 'email': member.email},
-        actor_type='candidate',
-        member_name=member.name,
-        member_mssv=member.MSSV
-    )
-
-    member_data = member_to_dict(member)
-    announcer.announce('member_confirmed', member_data)
-    logging.info(f"Candidate confirmed participation: {member.name} ({member.MSSV})")
-
-    # --- KÍCH HOẠT GỬI EMAIL XÁC NHẬN KÈM QR & ICS (BACKGROUND THREAD) ---
-    app_root = os.path.dirname(os.path.abspath(__file__))
-    send_confirmation_email_async(member_data, app_root)
-    # --------------------------------------------------------------------
-
     return jsonify(confirm_summary(member))
 
 @app.route('/api/confirm/<token>/confirm', methods=['POST'])
@@ -1473,3 +1567,1176 @@ ensure_schema()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
+
+
+--- FILE: .\backend\requirements.txt ---
+Flask==3.0.3
+Flask-Cors==5.0.0
+Flask-SQLAlchemy==3.1.1
+SQLAlchemy==2.0.35
+Flask-JWT-Extended==4.7.1
+Authlib==1.3.2
+gunicorn==20.1.0
+python-dotenv==1.0.1
+requests==2.32.5
+pandas==2.3.3
+Werkzeug==3.0.4
+Jinja2==3.1.4
+MarkupSafe==2.1.5
+itsdangerous==2.2.0
+click==8.1.7
+blinker==1.8.2
+typing_extensions==4.12.2
+
+
+--- FILE: .\backend\wsgi.py ---
+from app import app, db
+import logging
+import os
+
+# Set up production logging
+LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Ensure tables exist at startup
+with app.app_context():
+    try:
+        db.create_all()
+        logger.info("Database initialized successfully with WAL optimizations")
+    except Exception as e:
+        logger.error(f"Error during database initialization: {e}")
+
+if __name__ == "__main__":
+    logger.info("Starting development server on port 8091")
+    app.run(
+        host='0.0.0.0',
+        port=8091,
+        debug=False,
+        threaded=True
+    )
+
+--- FILE: .\frontend\eslint.config.js ---
+import js from '@eslint/js'
+import globals from 'globals'
+import react from 'eslint-plugin-react'
+import reactHooks from 'eslint-plugin-react-hooks'
+import reactRefresh from 'eslint-plugin-react-refresh'
+
+export default [
+  { ignores: ['dist'] },
+  {
+    files: ['**/*.{js,jsx}'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.browser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        ecmaFeatures: { jsx: true },
+        sourceType: 'module',
+      },
+    },
+    settings: { react: { version: '18.3' } },
+    plugins: {
+      react,
+      'react-hooks': reactHooks,
+      'react-refresh': reactRefresh,
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      ...react.configs.recommended.rules,
+      ...react.configs['jsx-runtime'].rules,
+      ...reactHooks.configs.recommended.rules,
+      'react/jsx-no-target-blank': 'off',
+      'react-refresh/only-export-components': [
+        'warn',
+        { allowConstantExport: true },
+      ],
+    },
+  },
+]
+
+
+--- FILE: .\frontend\vite.config.js ---
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    host: '0.0.0.0', // Listen on all network interfaces
+    port: 5200, // Default Vite port
+    strictPort: true, // Don't try other ports if this one is taken
+  },
+})
+
+
+--- FILE: .\frontend\src\config.js ---
+import {
+  FaUser,
+  FaFilePdf,
+  FaCheckCircle,
+  FaTimesCircle,
+  FaCalendarAlt,
+  FaEdit,
+  FaBullhorn,
+  FaMicrophoneAlt,
+  FaKey,
+} from 'react-icons/fa';
+
+// Backend API URL:
+// - When specified via VITE_API_URL, use that explicit endpoint.
+// - In local development mode (`pnpm dev`), default to 'http://localhost:8091'.
+// - In production container behind Nginx, default to '' (same-origin relative path),
+//   which routes /api (including /api/events SSE) through Nginx reverse proxy without CORS or IP issues.
+export const BASE_URL = import.meta.env.VITE_API_URL !== undefined
+  ? import.meta.env.VITE_API_URL
+  : (import.meta.env.DEV ? 'http://localhost:8091' : '');
+
+export const DEPARTMENT_LABELS = {
+  ai: 'AI for Automobile',
+  electrical: 'Điện - Điện tử',
+  simulation: 'Mô phỏng',
+  experiment: 'Thí nghiệm',
+  communication: 'Truyền thông',
+  english: 'Tiếng Anh',
+  manufacturing: 'Cơ khí',
+  event: 'Sự kiện',
+};
+
+export const TRACK_LABELS = {
+  engineering: 'Kỹ thuật',
+  media: 'Truyền thông',
+};
+
+// Audit-trail presentation, shared by the per-candidate history in
+// CandidateDetailModal and the full history screen (AuditLogHistory).
+// Keys must match the `action` strings written by record_audit_log() in
+// backend/app.py — an unknown action falls back to a neutral gray badge.
+export const ACTION_ICONS = {
+  'Nộp hồ sơ ứng tuyển': FaFilePdf,
+  'Thêm ứng viên': FaUser,
+  'Duyệt đậu vòng đơn': FaCheckCircle,
+  'Duyệt trượt vòng đơn': FaTimesCircle,
+  'Xác nhận tham gia phỏng vấn': FaCalendarAlt,
+  'Yêu cầu đổi lịch phỏng vấn': FaCalendarAlt,
+  'Tạo lại mật khẩu xác nhận': FaKey,
+  'Check-in tại sự kiện': FaCheckCircle,
+  'Gọi phỏng vấn': FaBullhorn,
+  'Bắt đầu phỏng vấn': FaMicrophoneAlt,
+  'Hoàn thành phỏng vấn': FaCheckCircle,
+  'Cập nhật thông tin': FaEdit,
+  'Chuyển trạng thái': FaEdit,
+  'Xoá ứng viên': FaTimesCircle,
+};
+
+export const ACTION_COLORS = {
+  'Nộp hồ sơ ứng tuyển': { bg: 'rgba(24, 144, 255, 0.12)', color: 'info.600', border: 'rgba(24, 144, 255, 0.3)' },
+  'Duyệt đậu vòng đơn': { bg: 'rgba(58, 197, 105, 0.12)', color: 'primary.600', border: 'rgba(58, 197, 105, 0.3)' },
+  'Duyệt trượt vòng đơn': { bg: 'rgba(245, 34, 45, 0.12)', color: 'danger.600', border: 'rgba(245, 34, 45, 0.3)' },
+  'Xác nhận tham gia phỏng vấn': { bg: 'rgba(82, 196, 26, 0.12)', color: 'success.700', border: 'rgba(82, 196, 26, 0.3)' },
+  'Yêu cầu đổi lịch phỏng vấn': { bg: 'rgba(250, 173, 20, 0.12)', color: 'warning.700', border: 'rgba(250, 173, 20, 0.3)' },
+  'Tạo lại mật khẩu xác nhận': { bg: 'rgba(250, 173, 20, 0.12)', color: 'warning.700', border: 'rgba(250, 173, 20, 0.3)' },
+  'Check-in tại sự kiện': { bg: 'rgba(82, 196, 26, 0.12)', color: 'success.700', border: 'rgba(82, 196, 26, 0.3)' },
+  'Gọi phỏng vấn': { bg: 'rgba(250, 173, 20, 0.12)', color: 'warning.700', border: 'rgba(250, 173, 20, 0.3)' },
+  'Bắt đầu phỏng vấn': { bg: 'rgba(114, 46, 209, 0.12)', color: 'secondary.600', border: 'rgba(114, 46, 209, 0.35)' },
+  'Hoàn thành phỏng vấn': { bg: 'rgba(58, 197, 105, 0.12)', color: 'primary.600', border: 'rgba(58, 197, 105, 0.3)' },
+  'Cập nhật thông tin': { bg: 'gray.100', color: 'gray.600', border: 'gray.200' },
+  'Xoá ứng viên': { bg: 'rgba(245, 34, 45, 0.12)', color: 'danger.600', border: 'rgba(245, 34, 45, 0.3)' },
+};
+
+export const ACTOR_TYPE_LABELS = {
+  admin: 'Ban quản trị',
+  candidate: 'Ứng viên',
+  system: 'Hệ thống',
+};
+
+// Sub-department independent pipeline states
+export const SUB_DEPARTMENT_STATES = [
+  'Chờ duyệt',
+  'Đậu vòng đơn',
+  'Trượt vòng đơn',
+  'Gọi PV',
+  'Đang phỏng vấn',
+  'Đã phỏng vấn',
+  'Đạt',
+  'Không đạt',
+];
+
+export const SUB_DEPARTMENT_STATE_PROPS = {
+  'Chờ duyệt': { bg: 'gray.100', color: 'gray.600', borderColor: 'gray.200', label: 'Chờ duyệt' },
+  'Đậu vòng đơn': { bg: 'rgba(24, 144, 255, 0.12)', color: 'info.600', borderColor: 'rgba(24, 144, 255, 0.3)', label: 'Đậu vòng đơn' },
+  'Trượt vòng đơn': { bg: 'rgba(245, 34, 45, 0.12)', color: 'danger.600', borderColor: 'rgba(245, 34, 45, 0.3)', label: 'Trượt vòng đơn' },
+  'Gọi PV': { bg: 'rgba(250, 173, 20, 0.15)', color: 'warning.700', borderColor: 'rgba(250, 173, 20, 0.35)', label: 'Gọi PV' },
+  'Đang phỏng vấn': { bg: 'rgba(114, 46, 209, 0.12)', color: 'secondary.600', borderColor: 'rgba(114, 46, 209, 0.35)', label: 'Đang PV' },
+  'Đã phỏng vấn': { bg: 'rgba(82, 196, 26, 0.15)', color: 'success.700', borderColor: 'rgba(82, 196, 26, 0.35)', label: 'Đã PV' },
+  'Đạt': { bg: 'rgba(58, 197, 105, 0.18)', color: 'primary.700', borderColor: 'rgba(58, 197, 105, 0.4)', label: 'Đạt' },
+  'Không đạt': { bg: 'rgba(245, 34, 45, 0.15)', color: 'danger.700', borderColor: 'rgba(245, 34, 45, 0.35)', label: 'Không đạt' },
+};
+
+export const parseSubDepartments = (sub) => {
+  if (!sub) return [];
+  if (Array.isArray(sub)) return sub;
+  try {
+    const parsed = JSON.parse(sub);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+export const parseSubDepartmentStates = (states) => {
+  if (!states) return {};
+  if (typeof states === 'object' && !Array.isArray(states)) return states;
+  try {
+    const parsed = JSON.parse(states);
+    return typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+// Sub-department interview table/room numbers, keyed by sub-dept — same
+// shape as parseSubDepartmentStates.
+export const parseSubDepartmentTables = (tables) => {
+  if (!tables) return {};
+  if (typeof tables === 'object' && !Array.isArray(tables)) return tables;
+  try {
+    const parsed = JSON.parse(tables);
+    return typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+// Main state pipeline order (numerical index for sequential gate comparison)
+export const MAIN_STATE_ORDER = {
+  'Chờ duyệt': 0,
+  'Trượt vòng đơn': 0,
+  'Đậu vòng đơn': 1,
+  'Xin đổi lịch': 1,
+  'Đã xác nhận': 2,
+  'Đã checkin': 3,
+  'Gọi PV': 4,
+  'Đang phỏng vấn': 5,
+  'Đã phỏng vấn': 6,
+};
+
+// Sub-dept screening states (Gate 1): unlocked when main >= 'Đậu vòng đơn'
+export const SUB_SCREENING_STATES = ['Chờ duyệt', 'Đậu vòng đơn', 'Trượt vòng đơn'];
+
+// Sub-dept interview states (Gate 2): unlocked when main = 'Đã phỏng vấn'
+export const SUB_INTERVIEW_STATES = ['Gọi PV', 'Đang phỏng vấn', 'Đã phỏng vấn', 'Đạt', 'Không đạt'];
+
+/**
+ * Checks whether sub-department flow is completely locked (Gate 1: main must be at least 'Đậu vòng đơn')
+ */
+export function isSubDeptLocked(mainState) {
+  return (MAIN_STATE_ORDER[mainState] ?? 0) < 1;
+}
+
+/**
+ * Checks whether sub-department interview states are locked (Gate 2: main must be at least 'Đã phỏng vấn')
+ */
+export function isSubDeptInterviewLocked(mainState) {
+  return (MAIN_STATE_ORDER[mainState] ?? 0) < 6;
+}
+
+/**
+ * Returns allowed sub-department states based on candidate's main state and sub-dept's current state.
+ */
+export function getSubDeptAllowedStates(mainState, currentSubState = 'Chờ duyệt') {
+  const mainLevel = MAIN_STATE_ORDER[mainState] ?? 0;
+  // Gate 1: main < Đậu vòng đơn -> entirely locked
+  if (mainLevel < 1) {
+    return [];
+  }
+  // If sub-dept failed screening, it cannot advance to interview
+  if (currentSubState === 'Trượt vòng đơn') {
+    return SUB_SCREENING_STATES;
+  }
+  // Gate 2: main reached Đã phỏng vấn -> interview states unlocked
+  if (mainLevel >= 6) {
+    return [...SUB_SCREENING_STATES, ...SUB_INTERVIEW_STATES];
+  }
+  // Main >= Đậu vòng đơn but < Đã phỏng vấn: only screening states allowed
+  return SUB_SCREENING_STATES;
+}
+
+/**
+ * Checks whether a candidate is currently in active interview (either main or sub-department).
+ */
+export function isMemberInActiveInterview(member) {
+  if (!member) return false;
+  if (member.state === 'Đang phỏng vấn' || member.state === 'Gọi PV') {
+    return true;
+  }
+  const subStates = parseSubDepartmentStates(member.sub_department_states);
+  return Object.values(subStates).some(
+    (st) => st === 'Đang phỏng vấn' || st === 'Gọi PV'
+  );
+}
+
+/**
+ * Extracts all active interview sessions (main and sub-departments) for a candidate.
+ */
+export function getMemberActiveInterviewSessions(member) {
+  if (!member) return [];
+  const sessions = [];
+
+  // 1. Main department session
+  if (member.state === 'Đang phỏng vấn' || member.state === 'Gọi PV') {
+    sessions.push({
+      uniqueKey: `${member.id}-main`,
+      member,
+      candidateName: member.name,
+      candidateMSSV: member.MSSV,
+      major_class: member.major_class,
+      deptKey: member.specialist,
+      deptLabel: DEPARTMENT_LABELS[member.specialist] || member.specialist || 'Chung / Chưa phân mảng',
+      state: member.state,
+      isSubDept: false,
+      table: member.interview_table || null,
+    });
+  }
+
+  // 2. Sub-department sessions
+  const subStates = parseSubDepartmentStates(member.sub_department_states);
+  const subTables = parseSubDepartmentTables(member.sub_department_tables);
+  Object.entries(subStates).forEach(([subKey, subState]) => {
+    if (subState === 'Đang phỏng vấn' || subState === 'Gọi PV') {
+      sessions.push({
+        uniqueKey: `${member.id}-sub-${subKey}`,
+        member,
+        candidateName: member.name,
+        candidateMSSV: member.MSSV,
+        major_class: member.major_class,
+        deptKey: subKey,
+        deptLabel: DEPARTMENT_LABELS[subKey] || subKey,
+        state: subState,
+        isSubDept: true,
+        subDeptKey: subKey,
+        table: subTables[subKey] || null,
+      });
+    }
+  });
+
+  return sessions;
+}
+
+/**
+ * Determines the next sequential advance action for a sub-department based on main state and current sub state.
+ */
+export function getSubDeptNextAction(mainState, currentSubState = 'Chờ duyệt') {
+  const mainLevel = MAIN_STATE_ORDER[mainState] ?? 0;
+
+  // Gate 1: main hasn't passed screening
+  if (mainLevel < 1) {
+    return { type: 'locked', label: 'Chờ mảng chính', reason: 'Mảng chính chưa đậu vòng đơn' };
+  }
+
+  // Gate 1 passed:
+  if (currentSubState === 'Chờ duyệt') {
+    return {
+      type: 'screen',
+      actions: [
+        { label: 'Duyệt đậu', nextState: 'Đậu vòng đơn', colorScheme: 'info' },
+        { label: 'Trượt', nextState: 'Trượt vòng đơn', colorScheme: 'red', variant: 'ghost' },
+      ],
+    };
+  }
+
+  if (currentSubState === 'Trượt vòng đơn') {
+    return { type: 'finished', label: 'Trượt vòng đơn' };
+  }
+
+  if (currentSubState === 'Đậu vòng đơn') {
+    if (mainLevel < 6) {
+      return { type: 'locked', label: 'Chờ PV chính', reason: 'Mảng chính chưa hoàn thành phỏng vấn' };
+    }
+    return {
+      type: 'advance',
+      label: 'Gọi PV',
+      nextState: 'Gọi PV',
+      colorScheme: 'warning',
+    };
+  }
+
+  if (currentSubState === 'Gọi PV') {
+    return {
+      type: 'advance',
+      label: 'Bắt đầu PV',
+      nextState: 'Đang phỏng vấn',
+      colorScheme: 'secondary',
+    };
+  }
+
+  if (currentSubState === 'Đang phỏng vấn') {
+    return {
+      type: 'advance',
+      label: 'Kết thúc PV',
+      nextState: 'Đã phỏng vấn',
+      colorScheme: 'success',
+    };
+  }
+
+  if (currentSubState === 'Đã phỏng vấn') {
+    return {
+      type: 'evaluate',
+      actions: [
+        { label: 'Đạt', nextState: 'Đạt', colorScheme: 'primary' },
+        { label: 'K.Đạt', nextState: 'Không đạt', colorScheme: 'red', variant: 'outline' },
+      ],
+    };
+  }
+
+  return { type: 'finished', label: currentSubState };
+}
+
+
+
+
+
+
+--- FILE: .\frontend\src\components\ConfirmCredentialsModal.jsx ---
+import React from 'react';
+import {
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalCloseButton,
+  ModalBody,
+  ModalFooter,
+  Button,
+  FormControl,
+  FormLabel,
+  InputGroup,
+  Input,
+  InputRightElement,
+  VStack,
+  HStack,
+  Text,
+  Box,
+  useToast,
+} from '@chakra-ui/react';
+import { FaKey, FaCopy } from 'react-icons/fa';
+
+// Shown right after a candidate is approved (or their confirmation link is
+// reset) — this is the ONLY time the plaintext password is ever available;
+// the backend only stores its hash. Admin copies both and sends manually.
+const ConfirmCredentialsModal = ({ isOpen, onClose, url, password, candidateName }) => {
+  const toast = useToast();
+
+  const copy = async (value, label) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast({
+        title: `Đã copy ${label}`,
+        status: 'success',
+        duration: 2000,
+        isClosable: true,
+      });
+    } catch {
+      toast({
+        title: 'Không copy được, hãy bôi đen và copy thủ công',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} isCentered size="lg">
+      <ModalOverlay bg="blackAlpha.800" backdropFilter="blur(4px)" />
+      <ModalContent bg="white" borderColor="gray.200" borderWidth="1px" borderRadius="xl">
+        <ModalHeader borderBottomWidth="1px" borderColor="gray.200" py={4}>
+          <HStack spacing={3}>
+            <Box p={2} borderRadius="lg" bg="rgba(58, 197, 105, 0.12)" color="primary.500">
+              <FaKey size={16} />
+            </Box>
+            <Box>
+              <Text fontSize="md" fontWeight="bold" color="gray.900">
+                Thông tin xác nhận phỏng vấn
+              </Text>
+              <Text fontSize="xs" fontWeight="normal" color="gray.500">
+                Ứng viên: <Text as="span" color="primary.500" fontWeight="bold">{candidateName}</Text>
+              </Text>
+            </Box>
+          </HStack>
+        </ModalHeader>
+        <ModalCloseButton color="gray.500" />
+
+        <ModalBody py={6}>
+          <VStack spacing={5} align="stretch">
+            <Box p={3} borderRadius="lg" bg="rgba(58, 197, 105, 0.06)" border="1px solid" borderColor="rgba(58, 197, 105, 0.2)">
+              <Text fontSize="xs" color="gray.700">
+                💡 Gửi đường link và mật khẩu 6 số này cho ứng viên (qua email / Facebook / Zalo...).
+                Ứng viên sẽ dùng để tự xác nhận tham gia hoặc gửi yêu cầu đổi lịch.
+              </Text>
+            </Box>
+
+            <FormControl>
+              <FormLabel fontSize="xs" fontWeight="bold" color="gray.600" textTransform="uppercase" letterSpacing="0.05em">
+                Link xác nhận tham gia
+              </FormLabel>
+              <InputGroup size="md">
+                <Input value={url || ''} isReadOnly bg="gray.50" fontSize="sm" pr="5rem" />
+                <InputRightElement w="4.5rem">
+                  <Button
+                    size="xs"
+                    colorScheme="primary"
+                    variant="solid"
+                    leftIcon={<FaCopy />}
+                    onClick={() => copy(url, 'link')}
+                  >
+                    Copy
+                  </Button>
+                </InputRightElement>
+              </InputGroup>
+            </FormControl>
+
+            {password ? (
+              <FormControl>
+                <FormLabel fontSize="xs" fontWeight="bold" color="gray.600" textTransform="uppercase" letterSpacing="0.05em">
+                  Mật khẩu truy cập (6 số)
+                </FormLabel>
+                <InputGroup size="lg">
+                  <Input
+                    value={password}
+                    isReadOnly
+                    bg="gray.50"
+                    color="primary.600"
+                    fontSize="2xl"
+                    fontWeight="bold"
+                    letterSpacing="8px"
+                    textAlign="center"
+                    pr="5rem"
+                  />
+                  <InputRightElement w="4.5rem" h="full">
+                    <Button
+                      size="xs"
+                      colorScheme="primary"
+                      variant="solid"
+                      leftIcon={<FaCopy />}
+                      onClick={() => copy(password, 'mật khẩu')}
+                    >
+                      Copy
+                    </Button>
+                  </InputRightElement>
+                </InputGroup>
+                <Text fontSize="xs" color="warning.600" mt={1.5}>
+                  ⚠️ Mật khẩu chỉ hiển thị một lần duy nhất lúc tạo. Nếu mất, vui lòng dùng nút &ldquo;Tạo mật khẩu mới&rdquo;.
+                </Text>
+              </FormControl>
+            ) : (
+              <Box p={3} borderRadius="md" bg="gray.50" border="1px dashed" borderColor="gray.200">
+                <Text fontSize="xs" color="gray.400">
+                  Mật khẩu được lưu trữ dưới dạng mã hoá (hash) an toàn. Để cấp lại mật khẩu mới, admin bấm &ldquo;Tạo mật khẩu mới&rdquo; tại danh sách Ứng viên đã duyệt.
+                </Text>
+              </Box>
+            )}
+          </VStack>
+        </ModalBody>
+
+        <ModalFooter borderTopWidth="1px" borderColor="gray.200">
+          <Button colorScheme="primary" onClick={onClose}>
+            Hoàn tất
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
+  );
+};
+
+export default ConfirmCredentialsModal;
+
+
+--- FILE: .\frontend\src\pages\ConfirmParticipation.jsx ---
+import React, { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import axios from 'axios';
+import {
+  Box,
+  Button,
+  Center,
+  Heading,
+  Image,
+  Input,
+  Spinner,
+  Text,
+  Textarea,
+  VStack,
+  HStack,
+  Badge,
+  FormControl,
+  FormLabel,
+  SimpleGrid,
+  Divider,
+  useToast,
+} from '@chakra-ui/react';
+import {
+  FaCheckCircle,
+  FaCalendarAlt,
+  FaClock,
+  FaKey,
+  FaExclamationCircle,
+  FaCheck,
+  FaHistory,
+  FaUserGraduate,
+  FaArrowLeft,
+} from 'react-icons/fa';
+import { BASE_URL, DEPARTMENT_LABELS } from '../config';
+
+// Standalone axios instance for public candidate confirmation
+const api = axios.create({ baseURL: BASE_URL });
+
+const CardShell = ({ children }) => (
+  <Center minH="100vh" bg="#f8fafc" px={4} py={{ base: 6, md: 10 }}>
+    <Box
+      maxW="480px"
+      w="full"
+      bg="white"
+      borderRadius="2xl"
+      borderWidth="1px"
+      borderColor="gray.200"
+      boxShadow="0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.02)"
+      p={{ base: 6, sm: 8 }}
+    >
+      {/* Brand Header */}
+      <VStack spacing={2} mb={6} textAlign="center">
+        <Image
+          src="/logobkauto.png"
+          alt="BK-AUTO Logo"
+          height="52px"
+          objectFit="contain"
+          mx="auto"
+          fallback={
+            <Box
+              px={3}
+              py={1.5}
+              borderRadius="lg"
+              bg="rgba(58, 197, 105, 0.12)"
+              color="primary.600"
+              fontWeight="extrabold"
+              fontSize="lg"
+            >
+              BK-AUTO
+            </Box>
+          }
+        />
+        <Text
+          fontSize="10px"
+          fontWeight="bold"
+          letterSpacing="0.12em"
+          textTransform="uppercase"
+          color="gray.400"
+        >
+          Câu Lạc Bộ BK-AUTO • Tuyển Thành Viên
+        </Text>
+      </VStack>
+      <Divider borderColor="gray.100" mb={6} />
+      {children}
+    </Box>
+  </Center>
+);
+
+const ConfirmParticipation = () => {
+  const { token } = useParams();
+  const toast = useToast();
+
+  const [phase, setPhase] = useState('checking'); // checking | invalid | password | verified
+  const [password, setPassword] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [summary, setSummary] = useState(null);
+  const [showReschedule, setShowReschedule] = useState(false);
+
+  // Reschedule form state
+  const [preferredDate, setPreferredDate] = useState('');
+  const [preferredTime, setPreferredTime] = useState('');
+  const [reason, setReason] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+
+  useEffect(() => {
+    api
+      .get(`/api/confirm/${token}`)
+      .then(() => setPhase('password'))
+      .catch(() => setPhase('invalid'));
+  }, [token]);
+
+  const handleVerify = async () => {
+    if (!password.trim()) {
+      toast({
+        title: 'Vui lòng nhập mật khẩu',
+        status: 'warning',
+        duration: 2500,
+        isClosable: true,
+      });
+      return;
+    }
+
+    setVerifying(true);
+    try {
+      const response = await api.post(`/api/confirm/${token}/verify`, { password });
+      setSummary(response.data);
+      setPhase('verified');
+    } catch (error) {
+      toast({
+        title: error.response?.data?.message || 'Mật khẩu xác thực không đúng',
+        description: 'Vui lòng kiểm tra lại mật khẩu 6 số đã được gửi cho bạn.',
+        status: 'error',
+        duration: 3500,
+        isClosable: true,
+      });
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    setActionLoading(true);
+    try {
+      const response = await api.post(`/api/confirm/${token}/confirm`, { password });
+      setSummary(response.data);
+      toast({
+        title: 'Xác nhận thành công!',
+        description: 'Bạn đã xác nhận tham gia buổi phỏng vấn.',
+        status: 'success',
+        duration: 4000,
+        isClosable: true,
+      });
+    } catch (error) {
+      toast({
+        title: error.response?.data?.message || 'Có lỗi xảy ra khi xác nhận',
+        status: 'error',
+        duration: 3500,
+        isClosable: true,
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReschedule = async () => {
+    if (!preferredDate && !preferredTime && !reason.trim()) {
+      toast({
+        title: 'Vui lòng cung cấp thông tin đổi lịch',
+        description: 'Vui lòng chọn ngày, giờ hoặc nhập lý do mong muốn đổi lịch.',
+        status: 'warning',
+        duration: 3500,
+        isClosable: true,
+      });
+      return;
+    }
+
+    // Build structured reason string
+    const timeElements = [];
+    if (preferredTime) timeElements.push(`Giờ: ${preferredTime}`);
+    if (preferredDate) timeElements.push(`Ngày: ${preferredDate}`);
+
+    let formattedReason = '';
+    if (timeElements.length > 0) {
+      formattedReason = `[Đề xuất: ${timeElements.join(', ')}] ${reason.trim()}`.trim();
+    } else {
+      formattedReason = reason.trim();
+    }
+
+    setActionLoading(true);
+    try {
+      const response = await api.post(`/api/confirm/${token}/reschedule`, {
+        password,
+        reason: formattedReason,
+      });
+      setSummary(response.data);
+      setShowReschedule(false);
+      toast({
+        title: 'Đã gửi yêu cầu đổi lịch thành công!',
+        description: 'Ban Quản Lý sẽ sớm liên hệ lại với bạn.',
+        status: 'success',
+        duration: 4000,
+        isClosable: true,
+      });
+    } catch (error) {
+      toast({
+        title: error.response?.data?.message || 'Có lỗi xảy ra khi gửi yêu cầu',
+        status: 'error',
+        duration: 3500,
+        isClosable: true,
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // 1. Loading Phase
+  if (phase === 'checking') {
+    return (
+      <CardShell>
+        <VStack spacing={4} py={8}>
+          <Spinner size="xl" thickness="3px" color="primary.500" speed="0.7s" />
+          <Text fontSize="sm" color="gray.500" fontWeight="medium">
+            Đang kiểm tra liên kết xác nhận...
+          </Text>
+        </VStack>
+      </CardShell>
+    );
+  }
+
+  // 2. Invalid Link Phase
+  if (phase === 'invalid') {
+    return (
+      <CardShell>
+        <VStack spacing={4} textAlign="center" py={4}>
+          <Box p={3} borderRadius="full" bg="red.50" color="red.500">
+            <FaExclamationCircle size={32} />
+          </Box>
+          <Heading size="md" color="gray.900" fontWeight="bold">
+            Liên kết không hợp lệ
+          </Heading>
+          <Text color="gray.600" fontSize="sm" lineHeight="tall">
+            Liên kết này không tồn tại hoặc đã hết hạn xác nhận. Vui lòng liên hệ trực tiếp Ban Quản Lý CLB BK-AUTO qua Fanpage hoặc Email để được hỗ trợ.
+          </Text>
+        </VStack>
+      </CardShell>
+    );
+  }
+
+  // 3. Password Phase
+  if (phase === 'password') {
+    return (
+      <CardShell>
+        <VStack spacing={5} align="stretch">
+          <VStack spacing={2} textAlign="center">
+            <Box p={3} borderRadius="full" bg="rgba(58, 197, 105, 0.12)" color="primary.600">
+              <FaKey size={24} />
+            </Box>
+            <Heading size="md" color="gray.900" fontWeight="bold">
+              Xác thực tham gia phỏng vấn
+            </Heading>
+            <Text color="gray.500" fontSize="xs">
+              Nhập mật khẩu 6 số được gửi qua tin nhắn / email của bạn để tiếp tục
+            </Text>
+          </VStack>
+
+          <FormControl>
+            <Input
+              placeholder="••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleVerify()}
+              textAlign="center"
+              fontSize="2xl"
+              fontWeight="bold"
+              letterSpacing="6px"
+              maxLength={6}
+              bg="gray.50"
+              borderColor="gray.200"
+              borderRadius="xl"
+              h="54px"
+              _focus={{
+                bg: 'white',
+                borderColor: 'primary.500',
+                boxShadow: '0 0 0 1px #3ac569',
+              }}
+              autoFocus
+            />
+          </FormControl>
+
+          <Button
+            colorScheme="primary"
+            size="lg"
+            borderRadius="xl"
+            w="full"
+            onClick={handleVerify}
+            isLoading={verifying}
+            loadingText="Đang xác thực..."
+          >
+            Tiếp tục
+          </Button>
+        </VStack>
+      </CardShell>
+    );
+  }
+
+  // 4. Verified Phase
+  const {
+    name,
+    specialist,
+    state,
+    reschedule_request: reschedule,
+    interview_info: interviewInfo,
+  } = summary || {};
+
+  return (
+    <CardShell>
+      <VStack spacing={5} align="stretch">
+        {/* Candidate Welcome Profile */}
+        <VStack spacing={2} textAlign="center">
+          <Box
+            p={3}
+            borderRadius="full"
+            bg="rgba(58, 197, 105, 0.12)"
+            color="primary.600"
+            display="inline-flex"
+          >
+            <FaUserGraduate size={24} />
+          </Box>
+          <Heading size="md" color="gray.900" fontWeight="bold">
+            Xin chào, {name}!
+          </Heading>
+          <HStack spacing={2} justify="center" flexWrap="wrap">
+            <Badge
+              colorScheme="primary"
+              variant="subtle"
+              px={2.5}
+              py={0.5}
+              borderRadius="full"
+              fontSize="xs"
+              fontWeight="semibold"
+            >
+              Mảng: {DEPARTMENT_LABELS[specialist] || specialist || 'Chung'}
+            </Badge>
+            <Badge
+              colorScheme={
+                state === 'Đã xác nhận'
+                  ? 'green'
+                  : state === 'Xin đổi lịch'
+                  ? 'orange'
+                  : 'blue'
+              }
+              variant="outline"
+              px={2.5}
+              py={0.5}
+              borderRadius="full"
+              fontSize="xs"
+              fontWeight="semibold"
+            >
+              {state}
+            </Badge>
+          </HStack>
+        </VStack>
+
+        {/* Scheduled Interview Info Box */}
+        {interviewInfo && (
+          <Box
+            p={4}
+            borderRadius="xl"
+            bg="gray.50"
+            borderWidth="1px"
+            borderColor="gray.200"
+          >
+            <HStack spacing={2} mb={1.5} color="gray.600">
+              <FaCalendarAlt size={13} />
+              <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" letterSpacing="0.05em">
+                Lịch phỏng vấn dự kiến
+              </Text>
+            </HStack>
+            <Text fontSize="sm" fontWeight="bold" color="gray.900">
+              {interviewInfo}
+            </Text>
+          </Box>
+        )}
+
+        {/* State 1: Confirmed Successfully */}
+        {state === 'Đã xác nhận' && (
+          <Box
+            p={4}
+            borderRadius="xl"
+            bg="green.50"
+            borderWidth="1px"
+            borderColor="green.200"
+            textAlign="center"
+          >
+            <VStack spacing={2}>
+              <Box color="green.600">
+                <FaCheckCircle size={28} />
+              </Box>
+              <Text fontSize="sm" fontWeight="bold" color="green.900">
+                Đã xác nhận tham gia phỏng vấn
+              </Text>
+              <Text fontSize="xs" color="green.700" lineHeight="tall">
+                Cảm ơn bạn đã xác nhận. Ban Quản Lý CLB đã lưu thông tin. Vui lòng có mặt đúng giờ hoặc trước 10 phút để chuẩn bị nhé!
+              </Text>
+            </VStack>
+          </Box>
+        )}
+
+        {/* State 2: Reschedule Requested */}
+        {state === 'Xin đổi lịch' && (
+          <VStack spacing={3} align="stretch">
+            <Box
+              p={4}
+              borderRadius="xl"
+              bg="orange.50"
+              borderWidth="1px"
+              borderColor="orange.200"
+            >
+              <HStack spacing={2} mb={1.5} color="orange.800">
+                <FaHistory size={14} />
+                <Text fontSize="xs" fontWeight="bold" textTransform="uppercase">
+                  Yêu cầu đổi lịch đã được ghi nhận
+                </Text>
+              </HStack>
+              <Text fontSize="xs" color="orange.900" mb={2}>
+                &ldquo;{reschedule}&rdquo;
+              </Text>
+              <Text fontSize="xs" color="gray.600">
+                BQL sẽ liên hệ lại qua SĐT hoặc Email bạn đã cung cấp để sắp xếp lịch phù hợp nhất.
+              </Text>
+            </Box>
+
+            <Button
+              variant="outline"
+              colorScheme="primary"
+              size="sm"
+              borderRadius="lg"
+              onClick={handleConfirm}
+              isLoading={actionLoading}
+            >
+              Vẫn xác nhận theo lịch cũ
+            </Button>
+          </VStack>
+        )}
+
+        {/* State 3: Passed Screening (Initial Decision Action) */}
+        {state === 'Đậu vòng đơn' && !showReschedule && (
+          <VStack spacing={3} align="stretch" pt={1}>
+            <Button
+              colorScheme="primary"
+              size="lg"
+              borderRadius="xl"
+              leftIcon={<FaCheck />}
+              onClick={handleConfirm}
+              isLoading={actionLoading}
+            >
+              Xác nhận tham gia phỏng vấn
+            </Button>
+            <Button
+              variant="outline"
+              colorScheme="gray"
+              size="md"
+              borderRadius="xl"
+              leftIcon={<FaCalendarAlt />}
+              onClick={() => setShowReschedule(true)}
+            >
+              Xin đổi lịch phỏng vấn
+            </Button>
+          </VStack>
+        )}
+
+        {/* State 4: Reschedule Form with Date & Time Pickers */}
+        {state === 'Đậu vòng đơn' && showReschedule && (
+          <Box
+            p={4}
+            borderRadius="xl"
+            bg="gray.50"
+            borderWidth="1px"
+            borderColor="gray.200"
+          >
+            <VStack spacing={3.5} align="stretch">
+              <HStack spacing={2} color="gray.800">
+                <FaCalendarAlt size={14} />
+                <Text fontSize="sm" fontWeight="bold">
+                  Yêu cầu đổi lịch phỏng vấn
+                </Text>
+              </HStack>
+              <Text fontSize="xs" color="gray.500">
+                Vui lòng chọn ngày, giờ bạn mong muốn đổi sang và nêu rõ lý do:
+              </Text>
+
+              {/* Date & Time Input Grid */}
+              <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3}>
+                <FormControl>
+                  <FormLabel fontSize="xs" fontWeight="semibold" color="gray.600">
+                    Ngày mong muốn
+                  </FormLabel>
+                  <Input
+                    type="date"
+                    size="sm"
+                    bg="white"
+                    borderRadius="md"
+                    borderColor="gray.200"
+                    value={preferredDate}
+                    onChange={(e) => setPreferredDate(e.target.value)}
+                  />
+                </FormControl>
+
+                <FormControl>
+                  <FormLabel fontSize="xs" fontWeight="semibold" color="gray.600">
+                    Khung giờ mong muốn
+                  </FormLabel>
+                  <Input
+                    type="time"
+                    size="sm"
+                    bg="white"
+                    borderRadius="md"
+                    borderColor="gray.200"
+                    value={preferredTime}
+                    onChange={(e) => setPreferredTime(e.target.value)}
+                  />
+                </FormControl>
+              </SimpleGrid>
+
+              {/* Reason Input */}
+              <FormControl isRequired>
+                <FormLabel fontSize="xs" fontWeight="semibold" color="gray.600">
+                  Lý do chi tiết
+                </FormLabel>
+                <Textarea
+                  placeholder="VD: Em bị trùng lịch thi học phần lúc 14h-16h, mong muốn đổi sang buổi tối..."
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  bg="white"
+                  borderColor="gray.200"
+                  borderRadius="md"
+                  fontSize="xs"
+                  rows={3}
+                />
+              </FormControl>
+
+              {/* Action Buttons */}
+              <HStack spacing={2} pt={1}>
+                <Button
+                  colorScheme="primary"
+                  size="sm"
+                  borderRadius="lg"
+                  flex="1"
+                  onClick={handleReschedule}
+                  isLoading={actionLoading}
+                  loadingText="Đang gửi..."
+                >
+                  Gửi yêu cầu đổi lịch
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  borderRadius="lg"
+                  leftIcon={<FaArrowLeft />}
+                  onClick={() => setShowReschedule(false)}
+                >
+                  Quay lại
+                </Button>
+              </HStack>
+            </VStack>
+          </Box>
+        )}
+
+        {/* State: Other unhandled statuses */}
+        {!['Đậu vòng đơn', 'Xin đổi lịch', 'Đã xác nhận'].includes(state) && (
+          <Text color="gray.500" textAlign="center" fontSize="xs" pt={2}>
+            Không có thao tác khả dụng ở bước này. Vui lòng liên hệ BQL CLB nếu bạn cần hỗ trợ.
+          </Text>
+        )}
+      </VStack>
+    </CardShell>
+  );
+};
+
+export default ConfirmParticipation;
+
+
