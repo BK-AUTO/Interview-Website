@@ -36,6 +36,12 @@ import { BASE_URL, DEPARTMENT_LABELS } from '../config';
 // Standalone axios instance for public candidate confirmation
 const api = axios.create({ baseURL: BASE_URL });
 
+// Giới hạn ngày/giờ cho phép chọn khi ứng viên yêu cầu đổi lịch
+const RESCHEDULE_MIN_DATE = '2026-09-27';
+const RESCHEDULE_MAX_DATE = '2026-09-29';
+const RESCHEDULE_MIN_TIME = '08:00';
+const RESCHEDULE_MAX_TIME = '20:00';
+
 const CardShell = ({ children }) => (
   <Center minH="100vh" bg="#f8fafc" px={4} py={{ base: 6, md: 10 }}>
     <Box
@@ -167,6 +173,28 @@ const ConfirmParticipation = () => {
       toast({
         title: 'Vui lòng cung cấp thông tin đổi lịch',
         description: 'Vui lòng chọn ngày, giờ hoặc nhập lý do mong muốn đổi lịch.',
+        status: 'warning',
+        duration: 3500,
+        isClosable: true,
+      });
+      return;
+    }
+
+    if (preferredDate && (preferredDate < RESCHEDULE_MIN_DATE || preferredDate > RESCHEDULE_MAX_DATE)) {
+      toast({
+        title: 'Ngày mong muốn không hợp lệ',
+        description: `Vui lòng chọn ngày trong khoảng 27-29/9.`,
+        status: 'warning',
+        duration: 3500,
+        isClosable: true,
+      });
+      return;
+    }
+
+    if (preferredTime && (preferredTime < RESCHEDULE_MIN_TIME || preferredTime > RESCHEDULE_MAX_TIME)) {
+      toast({
+        title: 'Khung giờ mong muốn không hợp lệ',
+        description: `Vui lòng chọn giờ trong khoảng ${RESCHEDULE_MIN_TIME} - ${RESCHEDULE_MAX_TIME}.`,
         status: 'warning',
         duration: 3500,
         isClosable: true,
@@ -346,8 +374,8 @@ const ConfirmParticipation = () => {
                 state === 'Đã xác nhận'
                   ? 'green'
                   : state === 'Xin đổi lịch'
-                  ? 'orange'
-                  : 'blue'
+                    ? 'orange'
+                    : 'blue'
               }
               variant="outline"
               px={2.5}
@@ -400,7 +428,7 @@ const ConfirmParticipation = () => {
                 Đã xác nhận tham gia phỏng vấn
               </Text>
               <Text fontSize="xs" color="green.700" lineHeight="tall">
-                Cảm ơn bạn đã xác nhận. Ban Quản Lý CLB đã lưu thông tin. Vui lòng có mặt đúng giờ hoặc trước 10 phút để chuẩn bị nhé!
+                Cảm ơn bạn đã xác nhận. Ban Quản Lý CLB đã tiếp nhận thông tin và gửi email cụ thể về buổi phỏng vấn vào mail của bạn. Vui lòng có mặt đúng giờ hoặc trước 10 phút để chuẩn bị nhé!
               </Text>
             </VStack>
           </Box>
@@ -501,6 +529,8 @@ const ConfirmParticipation = () => {
                     bg="white"
                     borderRadius="md"
                     borderColor="gray.200"
+                    min={RESCHEDULE_MIN_DATE}
+                    max={RESCHEDULE_MAX_DATE}
                     value={preferredDate}
                     onChange={(e) => setPreferredDate(e.target.value)}
                   />
@@ -516,6 +546,8 @@ const ConfirmParticipation = () => {
                     bg="white"
                     borderRadius="md"
                     borderColor="gray.200"
+                    min={RESCHEDULE_MIN_TIME}
+                    max={RESCHEDULE_MAX_TIME}
                     value={preferredTime}
                     onChange={(e) => setPreferredTime(e.target.value)}
                   />

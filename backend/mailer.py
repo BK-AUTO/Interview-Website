@@ -3,6 +3,7 @@ import io
 import smtplib
 import threading
 import logging
+from datetime import datetime, timezone
 from email.header import Header
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -18,8 +19,16 @@ SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "bkauto.ste@gmail.com")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD", "gokc piof wspg vsgr")
 
+# Định dạng: YYYYMMDDTHHMMSSZ (UTC). Ví dụ 08:00 Chủ nhật giờ VN (GMT+7) = 01:00 UTC.
+INTERVIEW_START_UTC = os.environ.get("INTERVIEW_START_UTC", "20260927T010000Z")
+INTERVIEW_END_UTC = os.environ.get("INTERVIEW_END_UTC", "20260927T043000Z")
+INTERVIEW_LOCATION = os.environ.get(
+    "INTERVIEW_LOCATION", "Nhà Khung – Nhà T, Đại học Bách khoa Hà Nội (58 Lê Thanh Nghị)"
+)
+
 def generate_ics_content(full_name: str, mssv: str, receiver_email: str) -> str:
     """Tạo nội dung file iCalendar (.ics) định dạng UTF-8."""
+    dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return f"""BEGIN:VCALENDAR
 PRODID:-//CLB BK-AUTO//Recruitment Interview//VI
 VERSION:2.0
@@ -27,12 +36,12 @@ CALSCALE:GREGORIAN
 METHOD:REQUEST
 BEGIN:VEVENT
 UID:bkauto-2026-interview-{mssv}@hust.edu.vn
-DTSTAMP:20260925T000000Z
-DTSTART:20260927T010000Z
-DTEND:20260927T043000Z
+DTSTAMP:{dtstamp}
+DTSTART:{INTERVIEW_START_UTC}
+DTEND:{INTERVIEW_END_UTC}
 SUMMARY;CHARSET=UTF-8:Phỏng vấn tuyển thành viên CLB BK-AUTO
-DESCRIPTION;CHARSET=UTF-8:Chào {full_name}!\\nMSSV: {mssv}\\nĐịa điểm: Nhà Khung – Nhà T, ĐHBK Hà Nội (58 Lê Thanh Nghị).\\nVui lòng mang theo email này để quét mã QR khi check-in.
-LOCATION;CHARSET=UTF-8:Nhà Khung – Nhà T, Đại học Bách khoa Hà Nội (58 Lê Thanh Nghị)
+DESCRIPTION;CHARSET=UTF-8:Chào {full_name}!\\nMSSV: {mssv}\\nĐịa điểm: {INTERVIEW_LOCATION}.\\nVui lòng mang theo email này để quét mã QR khi check-in.
+LOCATION;CHARSET=UTF-8:{INTERVIEW_LOCATION}
 ORGANIZER;CN=CLB BK-AUTO:mailto:{SENDER_EMAIL}
 ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN={full_name}:mailto:{receiver_email}
 STATUS:CONFIRMED

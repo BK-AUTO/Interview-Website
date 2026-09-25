@@ -1286,6 +1286,16 @@ def confirm_check_token(token):
     member = Member.query.filter_by(confirm_token=token).first()
     return jsonify({'valid': bool(member)}), (200 if member else 404)
 
+@app.route('/api/confirm/<token>/verify', methods=['POST'])
+def confirm_verify(token):
+    member = Member.query.filter_by(confirm_token=token).first()
+    if not member:
+        return jsonify({'message': 'Link không hợp lệ hoặc đã hết hạn'}), 404
+    password = (request.get_json(silent=True) or {}).get('password')
+    if not check_confirm_password(member, password):
+        return jsonify({'message': 'Mật khẩu không đúng'}), 401
+    return jsonify(confirm_summary(member))
+
 @app.route('/api/confirm/<token>/confirm', methods=['POST'])
 def confirm_participation(token):
     member = Member.query.filter_by(confirm_token=token).first()
@@ -1320,36 +1330,6 @@ def confirm_participation(token):
     send_confirmation_email_async(member_data, app_root)
     # --------------------------------------------------------------------
 
-    return jsonify(confirm_summary(member))
-
-@app.route('/api/confirm/<token>/confirm', methods=['POST'])
-def confirm_participation(token):
-    member = Member.query.filter_by(confirm_token=token).first()
-    if not member:
-        return jsonify({'message': 'Link không hợp lệ hoặc đã hết hạn'}), 404
-    password = (request.get_json(silent=True) or {}).get('password')
-    if not check_confirm_password(member, password):
-        return jsonify({'message': 'Mật khẩu không đúng'}), 401
-    if member.state not in ('Đậu vòng đơn', 'Xin đổi lịch'):
-        return jsonify({'message': f"Không thể xác nhận từ trạng thái hiện tại"}), 400
-
-    member.state = 'Đã xác nhận'
-    member.confirmed_at = format_gmt7_time()
-    db.session.commit()
-
-    record_audit_log(
-        member_id=member.id,
-        action='Xác nhận tham gia phỏng vấn',
-        details='Ứng viên tự xác nhận tham gia buổi phỏng vấn qua link và mật khẩu bảo mật',
-        actor={'username': member.MSSV, 'name': member.name, 'email': member.email},
-        actor_type='candidate',
-        member_name=member.name,
-        member_mssv=member.MSSV
-    )
-
-    member_data = member_to_dict(member)
-    announcer.announce('member_confirmed', member_data)
-    logging.info(f"Candidate confirmed participation: {member.name} ({member.MSSV})")
     return jsonify(confirm_summary(member))
 
 @app.route('/api/confirm/<token>/reschedule', methods=['POST'])
